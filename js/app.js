@@ -4,15 +4,12 @@
  * ============================================================
  *
  * Responsibilities:
- *   - Render sidebar navigation buttons
- *   - Handle page routing (click nav → render page)
+ *   - Check authentication on load
+ *   - Render sidebar navigation buttons + user info
+ *   - Handle page routing
  *   - Mobile sidebar toggle
- *
- * Developer: this file should stay small. All page rendering
- * logic lives in pages.js; data in data.js; utils in utils.js.
  */
 
-// ── Navigation definition ──
 const NAV_ITEMS = [
   { key: 'dashboard',  label: 'Dashboard',       icon: 'dashboard' },
   { key: 'parts',      label: 'Spare Parts',     icon: 'parts' },
@@ -21,7 +18,6 @@ const NAV_ITEMS = [
   { key: 'reports',    label: 'Reports',          icon: 'reports' },
 ];
 
-// ── Page router map ──
 const PAGE_RENDERERS = {
   dashboard:  renderDashboard,
   parts:      renderParts,
@@ -32,8 +28,7 @@ const PAGE_RENDERERS = {
 
 /**
  * navigateTo(pageKey)
- * Switches the active page, updates nav highlight,
- * and calls the appropriate render function.
+ * Switches page, updates nav highlight, renders content.
  */
 function navigateTo(pageKey) {
   State.page = pageKey;
@@ -45,8 +40,7 @@ function navigateTo(pageKey) {
 
 /**
  * renderNav()
- * Builds the sidebar navigation buttons with
- * active state and low-stock badge.
+ * Builds sidebar nav buttons + user/logout section.
  */
 function renderNav() {
   const lowCount = lowStockParts().length;
@@ -63,6 +57,20 @@ function renderNav() {
       </button>
     `;
   }).join('');
+
+  // User info + logout in sidebar
+  const userEl = document.getElementById('sidebar-user');
+  if (userEl) {
+    userEl.innerHTML = `
+      <div class="user-info">
+        <div class="user-avatar">${getCurrentUser().charAt(0).toUpperCase()}</div>
+        <div class="user-details">
+          <div class="user-name">${getCurrentUser()}</div>
+          <button class="logout-link" onclick="logout()">Sign Out</button>
+        </div>
+      </div>
+    `;
+  }
 }
 
 // ── Mobile sidebar helpers ──
@@ -73,7 +81,14 @@ function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
 }
 
-// ── Boot ──
+// ── Boot: check auth on page load ──
 document.addEventListener('DOMContentLoaded', () => {
-  navigateTo('dashboard');
+  if (isLoggedIn()) {
+    // Already authenticated this session — show app
+    document.querySelector('.app-shell').style.display = 'flex';
+    bootApp();
+  } else {
+    // Show login screen
+    showLoginScreen();
+  }
 });
