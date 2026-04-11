@@ -11,11 +11,11 @@
  */
 
 const NAV_ITEMS = [
-  { key: 'dashboard',  label: 'Dashboard',       icon: 'dashboard' },
-  { key: 'parts',      label: 'Spare Parts',     icon: 'parts' },
-  { key: 'orders',     label: 'Service Orders',  icon: 'orders' },
-  { key: 'customers',  label: 'Customers',       icon: 'customers' },
-  { key: 'reports',    label: 'Reports',          icon: 'reports' },
+  { key: 'dashboard',  labelKey: 'dashboard', icon: 'dashboard' },
+  { key: 'parts',      labelKey: 'parts',     icon: 'parts' },
+  { key: 'orders',     labelKey: 'orders',    icon: 'orders' },
+  { key: 'customers',  labelKey: 'customers', icon: 'customers' },
+  { key: 'reports',    labelKey: 'reports',   icon: 'reports' },
 ];
 
 const PAGE_RENDERERS = {
@@ -52,7 +52,7 @@ function renderNav() {
     return `
       <button class="nav-btn ${active}" onclick="navigateTo('${n.key}')">
         ${icon(n.icon, 20)}
-        <span>${n.label}</span>
+        <span>${t(n.labelKey)}</span>
         ${badge}
       </button>
     `;
@@ -66,7 +66,7 @@ function renderNav() {
         <div class="user-avatar">${getCurrentUser().charAt(0).toUpperCase()}</div>
         <div class="user-details">
           <div class="user-name">${getCurrentUser()}</div>
-          <button class="logout-link" onclick="logout()">Sign Out</button>
+          <button class="logout-link" onclick="logout()">${t('signOut')}</button>
         </div>
       </div>
     `;
@@ -83,6 +83,7 @@ function closeSidebar() {
 
 // ── Boot: check auth on page load ──
 document.addEventListener('DOMContentLoaded', () => {
+  updateLangUI();
   if (isLoggedIn()) {
     // Already authenticated this session — show app
     document.querySelector('.app-shell').style.display = 'flex';

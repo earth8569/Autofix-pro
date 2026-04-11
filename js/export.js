@@ -62,13 +62,16 @@ function exportToExcel({ parts, orders, customers, dateFrom, dateTo }) {
   });
 
   /* ── Sheet 3: Customers ── */
-  const custRows = customers.map(c => ({
-    'Name':  c.name,
-    'Phone': c.phone,
-    'Vehicle': c.vehicle,
-    'Plate':   c.plate,
-    'Notes':   c.notes,
-  }));
+  const custRows = customers.map(c => {
+    const vehicles = c.vehicles || (c.vehicle ? [{ vehicle: c.vehicle, plate: c.plate }] : []);
+    return {
+      'Name':    c.name,
+      'Phone':   c.phone,
+      'Vehicle': vehicles.map(v => v.vehicle).join(', '),
+      'Plate':   vehicles.map(v => v.plate).join(', '),
+      'Notes':   c.notes,
+    };
+  });
 
   /* ── Sheet 4: Summary ── */
   const totalRev   = orderRows.reduce((s, r) => s + r['Total (฿)'], 0);

@@ -30,10 +30,18 @@ const SEED_PARTS = [
 ];
 
 // ── Seed: Customers ──
+// Each customer now has a `vehicles` array (supports multiple cars).
 const SEED_CUSTOMERS = [
-  { id: uid(), name: 'Somchai Prasert',   phone: '081-234-5678', vehicle: 'Toyota Vios 2020',  plate: 'กก 1234', notes: '' },
-  { id: uid(), name: 'Nattaya Wongkam',   phone: '089-876-5432', vehicle: 'Honda City 2019',   plate: 'ขข 5678', notes: 'Preferred customer' },
-  { id: uid(), name: 'Prayut Chaiyo',     phone: '062-111-2222', vehicle: 'Isuzu D-Max 2021',  plate: 'คค 9012', notes: '' },
+  { id: uid(), name: 'Somchai Prasert', phone: '081-234-5678',
+    vehicles: [{ id: uid(), vehicle: 'Toyota Vios 2020',     plate: 'กก 1234' }],
+    notes: '' },
+  { id: uid(), name: 'Nattaya Wongkam', phone: '089-876-5432',
+    vehicles: [{ id: uid(), vehicle: 'Honda City 2019',       plate: 'ขข 5678' },
+               { id: uid(), vehicle: 'Toyota Fortuner 2022',  plate: 'ขข 9999' }],
+    notes: 'Preferred customer' },
+  { id: uid(), name: 'Prayut Chaiyo',  phone: '062-111-2222',
+    vehicles: [{ id: uid(), vehicle: 'Isuzu D-Max 2021',      plate: 'คค 9012' }],
+    notes: '' },
 ];
 
 // ── Seed: Service Orders ──
@@ -43,16 +51,18 @@ const SEED_ORDERS = (() => {
   const services = ['Oil Change','Brake Replacement','Engine Tune-Up','A/C Recharge','Tire Rotation'];
   for (let i = 0; i < 5; i++) {
     const c = SEED_CUSTOMERS[i % 3];
+    const v = c.vehicles[0]; // use customer's first vehicle
     const p = SEED_PARTS[i % SEED_PARTS.length];
     out.push({
       id: uid(),
       date: new Date(Date.now() - i * 3 * 86400000).toISOString().slice(0, 10),
-      customerId: c.id, customerName: c.name, vehicle: c.vehicle, plate: c.plate,
+      customerId: c.id, customerName: c.name, vehicle: v.vehicle, plate: v.plate,
       service: services[i],
       partsUsed: [{ partId: p.id, partName: p.name, qty: 1, unitPrice: p.price }],
       laborCost: [800, 1500, 2000, 1200, 600][i],
       discount: 0,
       status: statuses[i],
+      fulfilled: true,  // seed orders already have inventory accounted for
       notes: '',
     });
   }
@@ -61,13 +71,32 @@ const SEED_ORDERS = (() => {
 
 
 /* ══════════════════════════════════════
+ *  MIGRATION — convert old customer format
+ * ══════════════════════════════════════ */
+
+/**
+ * Converts customers saved with flat `vehicle`/`plate` fields
+ * (pre-multi-vehicle) to the new `vehicles: [...]` array format.
+ */
+function migrateCustomers(customers) {
+  return customers.map(c => {
+    if (c.vehicles) return c; // already new format
+    return {
+      ...c,
+      vehicles: [{ id: uid(), vehicle: c.vehicle || '', plate: c.plate || '' }],
+    };
+  });
+}
+
+/* ══════════════════════════════════════
  *  STATE — loaded from localStorage
  *  or seeded on first visit.
  * ══════════════════════════════════════ */
 const State = {
   parts:     load('ars_parts',     SEED_PARTS),
   orders:    load('ars_orders',    SEED_ORDERS),
-  customers: load('ars_customers', SEED_CUSTOMERS),
+  customers: migrateCustomers(load('ars_customers', SEED_CUSTOMERS)),
+  stockLog:  load('ars_stock_log', []),
 
   // Current page
   page: 'dashboard',
@@ -77,8 +106,30 @@ const State = {
     persist('ars_parts',     this.parts);
     persist('ars_orders',    this.orders);
     persist('ars_customers', this.customers);
+    persist('ars_stock_log', this.stockLog);
   },
 };
+
+/**
+ * logStockMove(partId, type, qty, balanceBefore, balanceAfter, reason)
+ * Prepends a stock movement entry. type: 'in' | 'out'
+ * Automatically persists.
+ */
+function logStockMove(partId, type, qty, balanceBefore, balanceAfter, reason) {
+  const now = new Date();
+  State.stockLog.unshift({
+    id:            uid(),
+    partId,
+    date:          now.toISOString().slice(0, 10),
+    time:          now.toTimeString().slice(0, 5),
+    type,
+    qty,
+    balanceBefore,
+    balanceAfter,
+    reason,
+  });
+  persist('ars_stock_log', State.stockLog);
+}
 
 
 /* ══════════════════════════════════════

@@ -503,3 +503,69 @@ select:focus { border-color: var(--accent); }
   padding: 0; text-align: left; transition: color .15s;
 }
 .logout-link:hover { color: var(--danger); }
+
+/* ──────────────────────────────────────
+   19. Language Toggle
+   ────────────────────────────────────── */
+.lang-toggle {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.lang-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all .15s;
+  letter-spacing: .3px;
+}
+.lang-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.lang-btn:hover:not(.active) {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+/* Login screen lang toggle */
+.login-lang {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+/* ──────────────────────────────────────
+   20. Validation & Multi-Vehicle
+   ────────────────────────────────────── */
+
+/* Red border on empty required fields */
+.input-error {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,0.15) !important;
+}
+
+/* Fulfilled state for icon button (green, non-interactive) */
+.btn-icon.fulfilled { color: var(--success); cursor: default; }
+.btn-icon.fulfilled:hover { color: var(--success); background: rgba(16,185,129,.1); cursor: default; }
+
+/* Vehicle lines in customer form */
+.vehicle-line {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 8px;
+}
+.vehicle-line input {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text);
+  font-family: var(--font); font-size: 13px; padding: 7px 10px;
+}
+.vehicle-line .vi-model { flex: 1; }
+.vehicle-line .vi-plate { flex: 0 0 150px; font-family: var(--font-mono); }

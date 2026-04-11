@@ -76,31 +76,38 @@ function showLoginScreen() {
   const existing = document.getElementById('login-screen');
   if (existing) existing.remove();
 
+  const lang = getLang();
   const loginHTML = document.createElement('div');
   loginHTML.id = 'login-screen';
   loginHTML.innerHTML = `
     <div class="login-container">
       <div class="login-card">
+
+        <div class="login-lang">
+          <button class="lang-btn ${lang === 'en' ? 'active' : ''}" onclick="setLang('en')">EN</button>
+          <button class="lang-btn ${lang === 'th' ? 'active' : ''}" onclick="setLang('th')">ภาษาไทย</button>
+        </div>
+
         <div class="login-logo">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
           </svg>
           <h1>AutoFix Pro</h1>
-          <p>Repair Shop Management System</p>
+          <p>${t('appTagline')}</p>
         </div>
 
         <div class="login-form">
           <div class="login-field">
-            <label for="login-id">User ID</label>
-            <input id="login-id" type="text" placeholder="Enter your ID" autocomplete="username" />
+            <label for="login-id">${t('userId')}</label>
+            <input id="login-id" type="text" placeholder="${t('enterUserId')}" autocomplete="username" />
           </div>
           <div class="login-field">
-            <label for="login-pw">Password</label>
-            <input id="login-pw" type="password" placeholder="Enter password" autocomplete="current-password" />
+            <label for="login-pw">${t('password')}</label>
+            <input id="login-pw" type="password" placeholder="${t('enterPassword')}" autocomplete="current-password" />
           </div>
           <div id="login-error" class="login-error"></div>
           <button id="login-btn" class="login-btn" onclick="handleLogin()">
-            Sign In
+            ${t('signIn')}
           </button>
         </div>
 
@@ -130,7 +137,7 @@ function handleLogin() {
   const errEl = document.getElementById('login-error');
 
   if (!id || !pw) {
-    errEl.textContent = 'Please enter both User ID and Password.';
+    errEl.textContent = t('errBothRequired');
     return;
   }
 
@@ -140,7 +147,7 @@ function handleLogin() {
     document.querySelector('.app-shell').style.display = 'flex';
     bootApp();
   } else {
-    errEl.textContent = 'Invalid User ID or Password.';
+    errEl.textContent = t('errInvalidCreds');
     document.getElementById('login-pw').value = '';
     document.getElementById('login-pw').focus();
     // Shake animation
