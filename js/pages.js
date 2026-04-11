@@ -25,6 +25,38 @@
 
 // Pending admin-protected part edit (set before admin modal opens)
 let _pendingPartEdit = null;
+// Pending admin-protected order edit when parts change on a fulfilled order
+let _pendingOrderEdit = null;
+// Pending new-part data when a duplicate SKU choice modal is open
+let _pendingNewPart = null;
+
+/**
+ * showInsufficientStock(shortages)
+ * Displays a modal listing every part that has insufficient stock.
+ * shortages: [{ name, required, available }, ...]
+ */
+function showInsufficientStock(shortages) {
+  const rows = shortages.map(s =>
+    `<li style="margin:6px 0;font-size:13px">
+       <strong>${s.name}</strong><br>
+       <span style="color:var(--text-muted);font-size:12px">
+         ${t('insufficientStockNeed')}: <strong>${s.required}</strong> &nbsp;|&nbsp;
+         ${t('insufficientStockHave')}: <strong style="color:var(--danger)">${s.available}</strong>
+       </span>
+     </li>`
+  ).join('');
+  openModal(t('insufficientStockTitle'), `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      ${icon('alert', 20, 'var(--danger)')}
+      <p style="margin:0;font-size:13px;color:var(--text-muted)">${t('insufficientStockDesc')}</p>
+    </div>
+    <ul style="margin:0 0 14px;padding-left:18px">${rows}</ul>
+    <p style="margin:0 0 16px;font-size:12px;color:var(--danger)">${t('insufficientStockFooter')}</p>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">${t('close')}</button>
+    </div>
+  `, 420);
+}
 
 /* ═══════════════════════════════════════════════
  *  DASHBOARD PAGE
@@ -130,7 +162,10 @@ function renderParts() {
     <div class="page fade-in">
       <div class="page-header">
         <h2 class="page-title">${icon('parts', 24)} ${t('spareParts')}</h2>
-        <button class="btn btn-primary" onclick="openPartForm()">${icon('plus', 16)} ${t('addPart')}</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-success" onclick="openRestockDropdown()">${icon('download', 16)} ${t('restockBtn')}</button>
+          <button class="btn btn-primary" onclick="openPartForm()">${icon('plus', 16)} ${t('addPart')}</button>
+        </div>
       </div>
       <div class="toolbar">
         <div class="search-box">${icon('search', 16)}<input id="part-search" placeholder="${t('searchParts')}" oninput="filterPartsTable()"/></div>
@@ -145,7 +180,8 @@ function renderParts() {
             <th>${t('colCategory')}</th><th>${t('colUnit')}</th>
             <th>${t('colCost')}</th><th>${t('colPrice')}</th>
             <th>${t('colMargin')}</th><th>${t('colQty')}</th>
-            <th>${t('colStatus')}</th><th style="width:120px">${t('colActions')}</th>
+            <th title="${t('bookedTooltip')}">${t('colBooked')}</th>
+            <th>${t('colStatus')}</th><th style="width:110px">${t('colActions')}</th>
           </tr></thead>
           <tbody id="parts-tbody"></tbody>
         </table>
@@ -168,7 +204,7 @@ function filterPartsTable() {
   });
   const tbody = document.getElementById('parts-tbody');
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="empty">${t('noPartsFound')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="empty">${t('noPartsFound')}</td></tr>`;
     return;
   }
   tbody.innerHTML = filtered.map(p => `
@@ -181,13 +217,14 @@ function filterPartsTable() {
       <td>${fmtCurrency(p.price)}</td>
       <td class="accent-text">${fmtCurrency(p.price - p.cost)}</td>
       <td>${p.qty}</td>
+      <td title="${t('bookedTooltip')}">${(() => { const bk = bookedQty(p.id); return bk > 0 ? `<span class="badge badge-warn">${bk}</span>` : `<span style="color:var(--text-muted)">—</span>`; })()}</td>
       <td>${p.qty <= p.reorder
         ? `<span class="badge badge-danger">${t('badgeLow')}</span>`
         : `<span class="badge badge-ok">${t('badgeOk')}</span>`}</td>
       <td class="actions">
         <button class="btn-icon" title="${t('stockLog')}" onclick="openStockLog('${p.id}')">${icon('history', 16)}</button>
-        <button class="btn-icon" title="${t('colActions')}" onclick="openPartForm('${p.id}')">${icon('edit', 16)}</button>
-        <button class="btn-icon danger" title="${t('colActions')}" onclick="deletePart('${p.id}')">${icon('trash', 16)}</button>
+        <button class="btn-icon" title="${t('editPart')}" onclick="openPartForm('${p.id}')">${icon('edit', 16)}</button>
+        <button class="btn-icon danger" title="${t('confirmDeletePart')}" onclick="deletePart('${p.id}')">${icon('trash', 16)}</button>
       </td>
     </tr>
   `).join('');
@@ -251,6 +288,13 @@ function savePart(id) {
     closeModal();
     renderParts();
   } else {
+    // Detect duplicate SKU before creating a new entry
+    const duplicate = State.parts.find(p => p.sku.toUpperCase() === sku.toUpperCase());
+    if (duplicate) {
+      _pendingNewPart = data;
+      openDuplicateSkuModal(duplicate);
+      return;
+    }
     const newId = uid();
     State.parts.push({ id: newId, ...data });
     if (data.qty > 0) {
@@ -268,6 +312,190 @@ function deletePart(id) {
   State.parts = State.parts.filter(p => p.id !== id);
   State.save();
   showToast(t('partDeleted'), 'warn');
+  renderParts();
+}
+
+/**
+ * openRestockDropdown(prefillId)
+ * Opens a part-picker modal with a dropdown + qty/cost inputs.
+ * Called from the "Restock" button in the Parts page header.
+ * prefillId optionally pre-selects a part (e.g. from duplicate-SKU flow).
+ */
+function openRestockDropdown(prefillId = '') {
+  const parts = [...State.parts].sort((a, b) => a.name.localeCompare(b.name));
+  if (!parts.length) { showToast(t('noPartsFound'), 'warn'); return; }
+  const options = parts.map(p =>
+    `<option value="${p.id}" ${p.id === prefillId ? 'selected' : ''}>${p.name} (${p.sku})</option>`
+  ).join('');
+  openModal(t('restockTitle'), `
+    <div class="form-grid" style="grid-template-columns:1fr;margin-bottom:4px">
+      <label>${t('restockPartLabel')}
+        <select id="rs-part" onchange="updateRestockInfo()">${options}</select>
+      </label>
+    </div>
+    <div id="rs-info"></div>
+    <div class="form-grid">
+      <label>${t('restockQtyLabel')}
+        <input id="rs-qty" type="number" min="1" placeholder="0"
+               oninput="this.classList.remove('input-error')"/>
+      </label>
+      <label>${t('restockCostLabel')}
+        <input id="rs-cost" type="number" min="0"/>
+      </label>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.5">${t('restockCostHint')}</p>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">${t('cancel')}</button>
+      <button class="btn btn-primary" onclick="saveRestockDropdown()">${icon('download', 16)} ${t('restockConfirm')}</button>
+    </div>
+  `, 440);
+  updateRestockInfo();
+}
+
+/** Updates the info strip and cost placeholder when the selected part changes. */
+function updateRestockInfo() {
+  const sel = document.getElementById('rs-part');
+  if (!sel) return;
+  const p = State.parts.find(x => x.id === sel.value);
+  if (!p) return;
+  const costInput = document.getElementById('rs-cost');
+  if (costInput) costInput.placeholder = p.cost;
+  const info = document.getElementById('rs-info');
+  if (info) {
+    info.innerHTML = `
+      <div style="background:var(--bg-card,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:13px">
+        <div class="mono" style="color:var(--text-muted);font-size:12px">${p.sku}</div>
+        <div style="margin-top:6px;color:var(--text-muted)">
+          ${t('qtyLabel')}: <strong>${p.qty} ${p.unit}</strong> &nbsp;·&nbsp;
+          ${t('costLabel')}: <strong>${fmtCurrency(p.cost)}</strong>
+        </div>
+      </div>
+    `;
+  }
+}
+
+/** Reads the selected part from the dropdown and delegates to saveRestock(). */
+function saveRestockDropdown() {
+  const sel = document.getElementById('rs-part');
+  if (!sel) return;
+  saveRestock(sel.value);
+}
+
+/**
+ * openRestockForm(id, prefillQty, prefillCost)
+ * Opens a focused modal to receive new stock for an existing part.
+ * prefillQty / prefillCost are optional — used when redirected from a
+ * duplicate-SKU modal so the values the user already typed carry over.
+ */
+function openRestockForm(id, prefillQty = '', prefillCost = '') {
+  const p = State.parts.find(x => x.id === id);
+  if (!p) return;
+  openModal(t('restockTitle'), `
+    <div style="background:var(--bg-card,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:13px">
+      <div style="font-weight:600">${p.name}</div>
+      <div class="mono" style="color:var(--text-muted);font-size:12px">${p.sku}</div>
+      <div style="margin-top:6px;color:var(--text-muted)">
+        ${t('qtyLabel')}: <strong>${p.qty} ${p.unit}</strong> &nbsp;·&nbsp;
+        ${t('costLabel')}: <strong>${fmtCurrency(p.cost)}</strong>
+      </div>
+    </div>
+    <div class="form-grid">
+      <label>${t('restockQtyLabel')}
+        <input id="rs-qty" type="number" min="1" value="${prefillQty}" placeholder="0"
+               oninput="this.classList.remove('input-error')"/>
+      </label>
+      <label>${t('restockCostLabel')}
+        <input id="rs-cost" type="number" min="0" value="${prefillCost}" placeholder="${p.cost}"/>
+      </label>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.5">${t('restockCostHint')}</p>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">${t('cancel')}</button>
+      <button class="btn btn-primary" onclick="saveRestock('${id}')">${icon('download', 16)} ${t('restockConfirm')}</button>
+    </div>
+  `, 400);
+}
+
+/** Applies a restock: adds qty, recalculates weighted avg cost if needed, logs movement. */
+function saveRestock(id) {
+  const p = State.parts.find(x => x.id === id);
+  if (!p) return;
+
+  const qtyEl  = document.getElementById('rs-qty');
+  const addQty = Number(qtyEl?.value) || 0;
+  if (addQty <= 0) { qtyEl.classList.add('input-error'); qtyEl.focus(); return; }
+
+  const rawCost = document.getElementById('rs-cost')?.value.trim();
+  const buyCost = rawCost !== '' && Number(rawCost) > 0 ? Number(rawCost) : p.cost;
+
+  const balanceBefore = p.qty;
+
+  // Weighted average cost when purchase price differs from current cost
+  if (buyCost !== p.cost) {
+    if (p.qty > 0) {
+      // Blend existing stock value with new purchase
+      p.cost = Math.round(((p.qty * p.cost) + (addQty * buyCost)) / (p.qty + addQty) * 100) / 100;
+    } else {
+      // No existing stock — new cost becomes the cost
+      p.cost = buyCost;
+    }
+  }
+
+  p.qty += addQty;
+  logStockMove(p.id, 'in', addQty, balanceBefore, p.qty,
+    `${t('logReasonRestock')} @ ${fmtCurrency(buyCost)}`);
+  State.save();
+  closeModal();
+  showToast(t('restockSuccess'));
+  renderParts();
+}
+
+/**
+ * openDuplicateSkuModal(existing)
+ * Shown when a new part's SKU matches an existing part.
+ * Lets the user choose: restock the existing part, or save as a separate variant.
+ */
+function openDuplicateSkuModal(existing) {
+  openModal(t('duplicateSkuTitle'), `
+    <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px">${t('duplicateSkuDesc')}</p>
+    <div style="background:var(--bg-card,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:13px">
+      <div style="font-weight:600">${existing.name}</div>
+      <div class="mono" style="color:var(--text-muted);font-size:12px">${existing.sku}</div>
+      <div style="margin-top:6px;color:var(--text-muted)">
+        ${t('qtyLabel')}: <strong>${existing.qty} ${existing.unit}</strong> &nbsp;·&nbsp;
+        ${t('costLabel')}: <strong>${fmtCurrency(existing.cost)}</strong>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-primary" onclick="openRestockFromDuplicate('${existing.id}')">${icon('download', 16)} ${t('duplicateRestockInstead')}</button>
+      <button class="btn" onclick="savePartForced()">${icon('plus', 16)} ${t('duplicateSaveNew')}</button>
+      <button class="btn btn-ghost" onclick="closeModal()">${t('cancel')}</button>
+    </div>
+  `, 420);
+}
+
+/** Redirects to the restock form, carrying over the qty and cost the user already entered. */
+function openRestockFromDuplicate(existingId) {
+  if (!_pendingNewPart) { closeModal(); return; }
+  const qty  = _pendingNewPart.qty  > 0 ? _pendingNewPart.qty  : '';
+  const cost = _pendingNewPart.cost > 0 ? _pendingNewPart.cost : '';
+  _pendingNewPart = null;
+  openRestockForm(existingId, qty, cost);
+}
+
+/** Saves the pending new part regardless of the duplicate SKU (user chose "separate variant"). */
+function savePartForced() {
+  if (!_pendingNewPart) { closeModal(); return; }
+  const data  = _pendingNewPart;
+  _pendingNewPart = null;
+  const newId = uid();
+  State.parts.push({ id: newId, ...data });
+  if (data.qty > 0) {
+    logStockMove(newId, 'in', data.qty, 0, data.qty, t('logReasonInitial'));
+  }
+  showToast(t('partAdded'));
+  State.save();
+  closeModal();
   renderParts();
 }
 
@@ -342,6 +570,110 @@ function confirmAdminPartSave() {
   renderParts();
 }
 
+/** Opens admin-credentials modal before saving an order whose partsUsed changed. */
+function openAdminOrderSaveModal(id, data, oldParts) {
+  const o = State.orders.find(x => x.id === id);
+
+  const partList = (parts) => parts.filter(p => p.partId).map(p =>
+    `<li style="margin:2px 0">${p.partName} × <strong>${p.qty}</strong></li>`
+  ).join('') || `<li style="color:var(--text-muted)">—</li>`;
+
+  openModal(t('adminConfirmTitle'), `
+    <p style="margin:0 0 14px;color:var(--text-muted);font-size:13px;line-height:1.5">${t('adminOrderEditDesc')}</p>
+    <div style="background:var(--bg-card,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:14px;font-size:13px">
+      <strong>${o?.service || ''}</strong> &nbsp;<span style="color:var(--text-muted);font-size:12px">${o?.date || ''}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;font-size:12px">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px">
+        <div style="font-weight:600;color:var(--text-muted);margin-bottom:4px">Before</div>
+        <ul style="margin:0;padding-left:16px">${partList(oldParts)}</ul>
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px">
+        <div style="font-weight:600;color:var(--success);margin-bottom:4px">After</div>
+        <ul style="margin:0;padding-left:16px">${partList(data.partsUsed)}</ul>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label style="font-size:13px;font-weight:500">${t('userId')}
+        <input id="ac-id" type="text" placeholder="${t('enterUserId')}" autocomplete="off"
+          style="display:block;width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:13px;padding:8px 10px;box-sizing:border-box"
+          oninput="document.getElementById('ac-err').textContent='';this.classList.remove('input-error')">
+      </label>
+      <label style="font-size:13px;font-weight:500">${t('password')}
+        <input id="ac-pw" type="password" placeholder="${t('enterPassword')}" autocomplete="off"
+          style="display:block;width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:13px;padding:8px 10px;box-sizing:border-box"
+          oninput="document.getElementById('ac-err').textContent='';this.classList.remove('input-error')"
+          onkeydown="if(event.key==='Enter')confirmAdminOrderSave()">
+      </label>
+    </div>
+    <div id="ac-err" style="color:var(--danger);font-size:12px;margin-top:8px;min-height:16px"></div>
+    <div class="form-actions" style="margin-top:16px">
+      <button class="btn btn-primary" onclick="confirmAdminOrderSave()">${icon('check',16)} ${t('save')}</button>
+      <button class="btn btn-ghost" onclick="closeModal()">${t('cancel')}</button>
+    </div>
+  `, 480);
+  setTimeout(() => document.getElementById('ac-id')?.focus(), 100);
+}
+
+/** Validates admin credentials then applies the pending order parts change + stock adjustments. */
+function confirmAdminOrderSave() {
+  const adminId = document.getElementById('ac-id').value.trim();
+  const adminPw = document.getElementById('ac-pw').value;
+  const errEl   = document.getElementById('ac-err');
+  const idEl    = document.getElementById('ac-id');
+  const pwEl    = document.getElementById('ac-pw');
+
+  if (!adminId) { idEl.classList.add('input-error'); idEl.focus(); errEl.textContent = t('errBothRequired'); return; }
+  if (!adminPw) { pwEl.classList.add('input-error'); pwEl.focus(); errEl.textContent = t('errBothRequired'); return; }
+
+  const valid = USERS.find(u => u.id === adminId && u.password === adminPw);
+  if (!valid) {
+    pwEl.value = '';
+    pwEl.classList.add('input-error');
+    pwEl.focus();
+    errEl.textContent = t('errInvalidCreds');
+    return;
+  }
+
+  if (!_pendingOrderEdit) { closeModal(); return; }
+  const { id, data, oldParts } = _pendingOrderEdit;
+
+  // Check stock after simulated reversal — new parts must be coverable
+  const shortages = checkPartsStockAfterReversal(data.partsUsed, oldParts);
+  if (shortages.length > 0) { showInsufficientStock(shortages); return; }
+
+  _pendingOrderEdit = null;
+
+  // Reverse old stock deductions (add back)
+  oldParts.forEach(pu => {
+    if (!pu.partId) return;
+    const pt = State.parts.find(p => p.id === pu.partId);
+    if (pt) {
+      const before = pt.qty;
+      pt.qty += pu.qty;
+      logStockMove(pt.id, 'in', pu.qty, before, pt.qty, `${t('logReasonOrderEdit')}: ${data.service}`);
+    }
+  });
+
+  // Apply new stock deductions
+  data.partsUsed.forEach(pu => {
+    if (!pu.partId) return;
+    const pt = State.parts.find(p => p.id === pu.partId);
+    if (pt) {
+      const before = pt.qty;
+      pt.qty = Math.max(0, pt.qty - pu.qty);
+      logStockMove(pt.id, 'out', pu.qty, before, pt.qty, `${t('logReasonOrderEdit')}: ${data.service}`);
+    }
+  });
+
+  const idx = State.orders.findIndex(o => o.id === id);
+  if (idx !== -1) State.orders[idx] = { ...State.orders[idx], ...data };
+  State.save();
+  closeModal();
+  showToast(t('orderUpdated'));
+  renderOrders();
+}
+
 /** Opens a modal showing the full stock in/out log for a part. */
 function openStockLog(partId) {
   const p = State.parts.find(x => x.id === partId);
@@ -391,6 +723,105 @@ function openStockLog(partId) {
      </div>`,
     660
   );
+}
+
+
+/* ═══════════════════════════════════════════════
+ *  STOCK HISTORY PAGE
+ * ═══════════════════════════════════════════════ */
+function renderStockHistory() {
+  document.getElementById('main-content').innerHTML = `
+    <div class="page fade-in">
+      <div class="page-header">
+        <h2 class="page-title">${icon('ledger', 24)} ${t('stockHistoryTitle')}</h2>
+      </div>
+      <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+        <div class="search-box" style="flex:1;min-width:200px">
+          ${icon('search', 16)}
+          <input id="sh-search" placeholder="${t('searchStockHistory')}" oninput="filterStockHistory()"/>
+        </div>
+        <select id="sh-type" onchange="filterStockHistory()">
+          <option value="All">${t('filterAll')}</option>
+          <option value="in">${t('logIn')}</option>
+          <option value="out">${t('logOut')}</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-muted)">
+          ${t('fromLabel')}
+          <input type="date" id="sh-from" onchange="filterStockHistory()"
+            style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:13px;padding:6px 8px"/>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-muted)">
+          ${t('toLabel')}
+          <input type="date" id="sh-to" onchange="filterStockHistory()"
+            style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:13px;padding:6px 8px"/>
+        </label>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr>
+            <th>${t('logColDate')}</th>
+            <th>${t('colPartName')}</th>
+            <th>${t('colSku')}</th>
+            <th>${t('logColType')}</th>
+            <th style="text-align:center">${t('logColQty')}</th>
+            <th style="text-align:center">${t('logColBefore')}</th>
+            <th style="text-align:center">${t('logColAfter')}</th>
+            <th>${t('logColReason')}</th>
+          </tr></thead>
+          <tbody id="sh-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  filterStockHistory();
+}
+
+function filterStockHistory() {
+  const search = (document.getElementById('sh-search')?.value || '').toLowerCase();
+  const type   = document.getElementById('sh-type')?.value   || 'All';
+  const from   = document.getElementById('sh-from')?.value   || '';
+  const to     = document.getElementById('sh-to')?.value     || '';
+
+  // Enrich each log entry with current part name/SKU (resolved at render time)
+  let entries = State.stockLog.map(e => {
+    const part = State.parts.find(p => p.id === e.partId);
+    return { ...e, partName: part?.name || '—', partSku: part?.sku || '—' };
+  });
+
+  if (type !== 'All') entries = entries.filter(e => e.type === type);
+  if (from)           entries = entries.filter(e => e.date >= from);
+  if (to)             entries = entries.filter(e => e.date <= to);
+  if (search)         entries = entries.filter(e =>
+    (e.partName + ' ' + e.partSku + ' ' + e.reason).toLowerCase().includes(search)
+  );
+
+  const tbody = document.getElementById('sh-tbody');
+  if (!tbody) return;
+
+  if (!entries.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">${t('noLogEntries')}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = entries.map(e => {
+    const isIn   = e.type === 'in';
+    const badge  = isIn
+      ? `<span class="badge badge-ok">${t('logIn')}</span>`
+      : `<span class="badge badge-danger">${t('logOut')}</span>`;
+    const change = isIn
+      ? `<span style="color:var(--success);font-weight:600">+${e.qty}</span>`
+      : `<span style="color:var(--danger);font-weight:600">−${e.qty}</span>`;
+    return `<tr>
+      <td class="mono" style="white-space:nowrap;font-size:12px">${e.date} ${e.time}</td>
+      <td>${e.partName}</td>
+      <td class="mono" style="font-size:12px">${e.partSku}</td>
+      <td>${badge}</td>
+      <td style="text-align:center">${change}</td>
+      <td style="text-align:center;color:var(--text-muted)">${e.balanceBefore}</td>
+      <td style="text-align:center;font-weight:600">${e.balanceAfter}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${e.reason}</td>
+    </tr>`;
+  }).join('');
 }
 
 
@@ -454,7 +885,11 @@ function filterOrdersTable() {
       ? `<button class="btn-icon fulfilled" title="${t('alreadyFulfilled')}" disabled>${icon('fulfill', 16)}</button>`
       : `<button class="btn-icon" title="${t('fulfillParts')}" style="color:var(--warn)" onclick="fulfillOrderParts('${o.id}')">${icon('fulfill', 16)}</button>`;
     return `<tr>
-      <td>${fmtDate(o.date)}</td><td>${o.customerName}</td>
+      <td>
+        <div>${fmtDate(o.date)}</div>
+        ${o.completedDate ? `<small style="color:var(--success);font-size:11px">✓ ${t('completedOn')}: ${fmtDate(o.completedDate)}</small>` : ''}
+      </td>
+      <td>${o.customerName}</td>
       <td>${o.vehicle}<br><small class="mono">${o.plate}</small></td>
       <td>${o.service}</td>
       <td>${fmtCurrency(pc)}</td><td>${fmtCurrency(o.laborCost)}</td>
@@ -490,6 +925,11 @@ function openOrderForm(id) {
   }).join('');
 
   openModal(isNew ? t('newServiceOrder') : t('editOrder'), `
+    ${!isNew ? `
+    <div style="display:flex;flex-wrap:wrap;gap:16px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:12px;font-size:12px;color:var(--text-muted)">
+      <span>${t('colCreatedDate')}: <strong style="color:var(--text)">${fmtDate(o.createdDate || o.date)}</strong></span>
+      ${o.completedDate ? `<span>${t('colCompletedDate')}: <strong style="color:var(--success)">${fmtDate(o.completedDate)}</strong></span>` : ''}
+    </div>` : ''}
     <div class="form-grid">
       <label>${t('dateLabel')}<input id="of-date" type="date" value="${o.date}"/></label>
       <label>${t('customerLabel')}
@@ -643,23 +1083,107 @@ function saveOrder(id) {
 
   if (id) {
     const idx = State.orders.findIndex(o => o.id === id);
+    const existing = State.orders[idx];
+
+    // If the order is fulfilled, check whether partsUsed changed — stock must be adjusted
+    if (existing && existing.fulfilled === true) {
+      const partsChanged = JSON.stringify(existing.partsUsed) !== JSON.stringify(data.partsUsed);
+      if (partsChanged) {
+        _pendingOrderEdit = { id, data, oldParts: JSON.parse(JSON.stringify(existing.partsUsed)) };
+        openAdminOrderSaveModal(id, data, existing.partsUsed);
+        return;
+      }
+    }
+
+    // Auto-deduct parts when an unfulfilled order is saved with status 'completed'
+    if (existing && existing.fulfilled !== true && data.status === 'completed') {
+      const shortages = checkPartsStock(data.partsUsed);
+      if (shortages.length > 0) { showInsufficientStock(shortages); return; }
+      if (idx !== -1) State.orders[idx] = { ...State.orders[idx], ...data, fulfilled: true, completedDate: today() };
+      data.partsUsed.forEach(pu => {
+        if (!pu.partId) return;
+        const pt = State.parts.find(p => p.id === pu.partId);
+        if (pt) {
+          const oldQty = pt.qty;
+          pt.qty = Math.max(0, pt.qty - pu.qty);
+          logStockMove(pt.id, 'out', pu.qty, oldQty, pt.qty, `${t('logReasonOrder')}: ${data.service}`);
+        }
+      });
+      State.save();
+      closeModal();
+      showToast(t('autoDeductSuccess'));
+      renderOrders();
+      return;
+    }
+
     if (idx !== -1) State.orders[idx] = { ...State.orders[idx], ...data };
     showToast(t('orderUpdated'));
   } else {
-    // Parts are NOT auto-deducted — use the Fulfill Parts button to deduct inventory
-    State.orders.unshift({ id: uid(), ...data, fulfilled: false });
-    showToast(t('orderCreated'));
+    // New order: auto-deduct immediately if created with status 'completed'
+    const newId = uid();
+    const autoFulfill = data.status === 'completed';
+    if (autoFulfill) {
+      const shortages = checkPartsStock(data.partsUsed);
+      if (shortages.length > 0) { showInsufficientStock(shortages); return; }
+    }
+    State.orders.unshift({
+      id: newId, ...data,
+      fulfilled:     autoFulfill,
+      createdDate:   today(),
+      completedDate: autoFulfill ? today() : null,
+    });
+    if (autoFulfill) {
+      data.partsUsed.forEach(pu => {
+        if (!pu.partId) return;
+        const pt = State.parts.find(p => p.id === pu.partId);
+        if (pt) {
+          const oldQty = pt.qty;
+          pt.qty = Math.max(0, pt.qty - pu.qty);
+          logStockMove(pt.id, 'out', pu.qty, oldQty, pt.qty, `${t('logReasonOrder')}: ${data.service}`);
+        }
+      });
+      showToast(t('autoDeductSuccess'));
+    } else {
+      showToast(t('orderCreated'));
+    }
   }
   State.save();
   closeModal();
   renderOrders();
 }
 
-/** Deducts parts used in an order from inventory and marks it fulfilled. */
+/** Opens a confirmation modal before completing a job and deducting parts. */
 function fulfillOrderParts(id) {
   const o = State.orders.find(x => x.id === id);
   if (!o || o.fulfilled === true) return;
-  if (!confirm(t('fulfillConfirm'))) return;
+
+  const partLines = o.partsUsed.filter(p => p.partId).map(p =>
+    `<li style="margin:2px 0">${p.partName} × <strong>${p.qty}</strong></li>`
+  ).join('') || `<li style="color:var(--text-muted)">—</li>`;
+
+  openModal(t('completeJobTitle'), `
+    <p style="margin:0 0 14px;color:var(--text-muted);font-size:13px;line-height:1.5">${t('completeJobDesc')}</p>
+    <div style="background:var(--bg-card,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:14px;font-size:13px">
+      <div><strong>${o.service}</strong></div>
+      <div style="color:var(--text-muted);font-size:12px;margin-top:2px">${o.customerName} — ${o.vehicle} <span class="mono">${o.plate}</span></div>
+    </div>
+    <div style="font-size:13px;margin-bottom:14px">
+      <div style="font-weight:600;margin-bottom:6px">${t('partsUsedSection')}:</div>
+      <ul style="margin:0;padding-left:18px">${partLines}</ul>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="doFulfillOrderParts('${id}')">${icon('check', 16)} ${t('completeAndDeduct')}</button>
+      <button class="btn btn-ghost" onclick="closeModal()">${t('cancel')}</button>
+    </div>
+  `, 420);
+}
+
+/** Performs the actual deduction after the user confirms via the modal. */
+function doFulfillOrderParts(id) {
+  const o = State.orders.find(x => x.id === id);
+  if (!o || o.fulfilled === true) { closeModal(); return; }
+  const shortages = checkPartsStock(o.partsUsed);
+  if (shortages.length > 0) { showInsufficientStock(shortages); return; }
   o.partsUsed.forEach(pu => {
     const pt = State.parts.find(p => p.id === pu.partId);
     if (pt) {
@@ -669,8 +1193,11 @@ function fulfillOrderParts(id) {
     }
   });
   o.fulfilled = true;
+  o.status = 'completed';
+  o.completedDate = today();
   State.save();
-  showToast(t('fulfillSuccess'));
+  closeModal();
+  showToast(t('autoDeductSuccess'));
   renderOrders();
 }
 

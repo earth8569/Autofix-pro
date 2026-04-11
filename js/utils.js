@@ -78,6 +78,7 @@ const ICONS = {
   fulfill:    'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
   car:        'M3 13h18M3 13l3-7h12l3 7M3 13v5h18v-5M8 18v1m8-1v1',
   history:    'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+  ledger:     'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
 };
 
 /**
@@ -87,6 +88,21 @@ const ICONS = {
 function icon(name, size = 20, color = 'currentColor') {
   const d = ICONS[name] || '';
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+}
+
+/**
+ * saveToServer(data)
+ * Fire-and-forget POST to the local Python server (/api/data).
+ * Writes a real file on disk so data survives browser cache clears.
+ * Silently no-ops if the server is not running (file:// mode).
+ */
+function saveToServer(data) {
+  if (typeof fetch === 'undefined') return;
+  fetch('/api/data', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(data),
+  }).catch(() => {}); // ignore network errors — localStorage is the fallback
 }
 
 /**
@@ -114,7 +130,7 @@ function openModal(title, contentHTML, maxWidth = 560) {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.id = 'active-modal';
-  backdrop.onclick = (e) => { if (e.target === backdrop) closeModal(); };
+  // Backdrop click does NOT close the modal — user must use ✕ or Cancel button.
   backdrop.innerHTML = `
     <div class="modal-box" style="max-width:${maxWidth}px" onclick="event.stopPropagation()">
       <div class="modal-header">

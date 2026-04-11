@@ -11,19 +11,21 @@
  */
 
 const NAV_ITEMS = [
-  { key: 'dashboard',  labelKey: 'dashboard', icon: 'dashboard' },
-  { key: 'parts',      labelKey: 'parts',     icon: 'parts' },
-  { key: 'orders',     labelKey: 'orders',    icon: 'orders' },
-  { key: 'customers',  labelKey: 'customers', icon: 'customers' },
-  { key: 'reports',    labelKey: 'reports',   icon: 'reports' },
+  { key: 'dashboard',    labelKey: 'dashboard',    icon: 'dashboard' },
+  { key: 'parts',        labelKey: 'parts',        icon: 'parts' },
+  { key: 'orders',       labelKey: 'orders',       icon: 'orders' },
+  { key: 'customers',    labelKey: 'customers',    icon: 'customers' },
+  { key: 'stockHistory', labelKey: 'stockHistory', icon: 'ledger' },
+  { key: 'reports',      labelKey: 'reports',      icon: 'reports' },
 ];
 
 const PAGE_RENDERERS = {
-  dashboard:  renderDashboard,
-  parts:      renderParts,
-  orders:     renderOrders,
-  customers:  renderCustomers,
-  reports:    renderReports,
+  dashboard:    renderDashboard,
+  parts:        renderParts,
+  orders:       renderOrders,
+  customers:    renderCustomers,
+  stockHistory: renderStockHistory,
+  reports:      renderReports,
 };
 
 /**

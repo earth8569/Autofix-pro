@@ -29,11 +29,12 @@ const TRANSLATIONS = {
     errInvalidCreds:  'Invalid User ID or Password.',
 
     // Navigation
-    dashboard: 'Dashboard',
-    parts:     'Spare Parts',
-    orders:    'Service Orders',
-    customers: 'Customers',
-    reports:   'Reports',
+    dashboard:    'Dashboard',
+    parts:        'Spare Parts',
+    orders:       'Service Orders',
+    customers:    'Customers',
+    reports:      'Reports',
+    stockHistory: 'Stock History',
 
     // Dashboard
     totalRevenue:    'Total Revenue',
@@ -85,6 +86,18 @@ const TRANSLATIONS = {
     partAdded:          'Part added successfully',
     partDeleted:        'Part deleted',
     confirmDeletePart:  'Delete this part? This cannot be undone.',
+    restockBtn:              'Restock',
+    restockTitle:            'Restock Part',
+    restockPartLabel:        'Select Part',
+    restockQtyLabel:         'Quantity to Add',
+    restockCostLabel:        'Purchase Cost (per unit)',
+    restockCostHint:         'Leave blank to keep the current cost. If the cost differs, a weighted average will be calculated automatically.',
+    restockConfirm:          'Confirm Restock',
+    restockSuccess:          'Stock replenished successfully',
+    duplicateSkuTitle:       'Duplicate SKU Detected',
+    duplicateSkuDesc:        'A part with this SKU already exists in your inventory:',
+    duplicateRestockInstead: 'Restock Existing Part',
+    duplicateSaveNew:        'Save as Separate Variant',
     all:                'All',
     badgeLow:    'LOW',
     badgeOk:     'OK',
@@ -97,7 +110,10 @@ const TRANSLATIONS = {
     newServiceOrder: 'New Service Order',
     editOrder:       'Edit Order',
     // Table columns
-    colDate:     'Date',
+    colDate:          'Date',
+    colCreatedDate:   'Created',
+    colCompletedDate: 'Completed',
+    completedOn:      'Completed',
     colCustomer: 'Customer',
     colVehicle:  'Vehicle',
     colService:  'Service',
@@ -168,6 +184,7 @@ const TRANSLATIONS = {
     adminConfirmTitle:     'Admin Confirmation Required',
     adminConfirmDesc:      'This action is protected. Enter admin credentials to permanently delete this customer.',
     adminStockEditDesc:    'Editing the stock quantity is a protected action. Enter admin credentials to apply this change.',
+    adminOrderEditDesc:    'Parts used in this fulfilled order have changed. Stock will be adjusted automatically. Enter admin credentials to save.',
 
     // Reports page
     reportsTitle:    'Reports & Export',
@@ -193,10 +210,21 @@ const TRANSLATIONS = {
     errVehicleRequired: 'Please add at least one vehicle.',
 
     // Fulfill parts (order actions)
-    fulfillParts:     'Fulfill Parts',
-    fulfillConfirm:   'Deduct parts used in this order from inventory? This cannot be undone.',
-    fulfillSuccess:   'Parts deducted from inventory',
-    alreadyFulfilled: 'Already fulfilled',
+    fulfillParts:       'Fulfill Parts',
+    fulfillConfirm:     'Deduct parts used in this order from inventory? This cannot be undone.',
+    fulfillSuccess:     'Parts deducted from inventory',
+    alreadyFulfilled:   'Already fulfilled',
+    completeJobTitle:   'Complete Job',
+    completeJobDesc:    'This will mark the order as Completed and deduct the parts from stock. This cannot be undone.',
+    completeAndDeduct:  'Complete & Deduct Parts',
+    autoDeductSuccess:  'Job completed – parts deducted from inventory',
+    colBooked:          'Booked',
+    bookedTooltip:      'Reserved for active jobs (not yet deducted)',
+    insufficientStockTitle:  'Insufficient Stock',
+    insufficientStockDesc:   'The following parts do not have enough stock to complete this job:',
+    insufficientStockFooter: 'Please restock the items above before completing this job.',
+    insufficientStockNeed:   'Need',
+    insufficientStockHave:   'In stock',
 
     // Stock Log
     stockLog:           'Stock Log',
@@ -212,10 +240,14 @@ const TRANSLATIONS = {
     noLogEntries:       'No log entries yet.',
     logReasonInitial:   'Initial stock',
     logReasonAdjusted:  'Manual adjustment',
+    logReasonRestock:   'Restock',
     logReasonOrder:     'Order fulfilled',
+    logReasonOrderEdit: 'Order edit',
     close:              'Close',
 
-    // Common
+    // Stock History page
+    stockHistoryTitle:   'Stock Movement History',
+    searchStockHistory:  'Search by part name, SKU, or reason…',
     save:   'Save',
     cancel: 'Cancel',
   },
@@ -237,11 +269,12 @@ const TRANSLATIONS = {
     errInvalidCreds:  'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
 
     // Navigation
-    dashboard: 'แดชบอร์ด',
-    parts:     'อะไหล่',
-    orders:    'ใบสั่งซ่อม',
-    customers: 'ลูกค้า',
-    reports:   'รายงาน',
+    dashboard:    'แดชบอร์ด',
+    parts:        'อะไหล่',
+    orders:       'ใบสั่งซ่อม',
+    customers:    'ลูกค้า',
+    reports:      'รายงาน',
+    stockHistory: 'ประวัติสต็อก',
 
     // Dashboard
     totalRevenue:    'รายได้รวม',
@@ -293,6 +326,18 @@ const TRANSLATIONS = {
     partAdded:         'เพิ่มอะไหล่เรียบร้อย',
     partDeleted:       'ลบอะไหล่แล้ว',
     confirmDeletePart: 'ลบอะไหล่นี้? ไม่สามารถกู้คืนได้',
+    restockBtn:              'รับเข้าสต็อก',
+    restockTitle:            'รับเข้าสต็อก',
+    restockPartLabel:        'เลือกอะไหล่',
+    restockQtyLabel:         'จำนวนที่รับเข้า',
+    restockCostLabel:        'ต้นทุนต่อหน่วย',
+    restockCostHint:         'หากไม่กรอกจะใช้ต้นทุนเดิม หากต้นทุนต่างออกไปจะคำนวณต้นทุนถัวเฉลี่ยให้อัตโนมัติ',
+    restockConfirm:          'ยืนยันรับเข้า',
+    restockSuccess:          'รับเข้าสต็อกเรียบร้อย',
+    duplicateSkuTitle:       'พบรหัส SKU ซ้ำ',
+    duplicateSkuDesc:        'มีอะไหล่รหัส SKU นี้อยู่ในคลังสินค้าแล้ว:',
+    duplicateRestockInstead: 'รับเข้าสต็อกของเดิม',
+    duplicateSaveNew:        'บันทึกเป็นรายการแยก',
     all:               'ทั้งหมด',
     badgeLow:    'ใกล้หมด',
     badgeOk:     'ปกติ',
@@ -305,7 +350,10 @@ const TRANSLATIONS = {
     newServiceOrder: 'ใบสั่งซ่อมใหม่',
     editOrder:       'แก้ไขใบสั่งซ่อม',
     // Table columns
-    colDate:     'วันที่',
+    colDate:          'วันที่',
+    colCreatedDate:   'วันที่สร้าง',
+    colCompletedDate: 'วันที่ปิดงาน',
+    completedOn:      'ปิดงาน',
     colCustomer: 'ลูกค้า',
     colVehicle:  'รถ',
     colService:  'รายการซ่อม',
@@ -376,6 +424,7 @@ const TRANSLATIONS = {
     adminConfirmTitle:     'ต้องการยืนยันจากผู้ดูแล',
     adminConfirmDesc:      'การดำเนินการนี้ต้องได้รับการยืนยัน กรุณาใส่ข้อมูลผู้ดูแลเพื่อลบลูกค้าถาวร',
     adminStockEditDesc:    'การแก้ไขจำนวนสต็อกต้องได้รับการยืนยัน กรุณาใส่ข้อมูลผู้ดูแลเพื่อดำเนินการ',
+    adminOrderEditDesc:    'รายการอะไหล่ในใบสั่งซ่อมที่ตัดสต็อกแล้วมีการเปลี่ยนแปลง ระบบจะปรับยอดสต็อกอัตโนมัติ กรุณาใส่ข้อมูลผู้ดูแลเพื่อบันทึก',
 
     // Reports page
     reportsTitle:    'รายงาน & ส่งออก',
@@ -401,10 +450,21 @@ const TRANSLATIONS = {
     errVehicleRequired: 'กรุณาเพิ่มรถอย่างน้อย 1 คัน',
 
     // Fulfill parts (order actions)
-    fulfillParts:     'ตัดสต็อก',
-    fulfillConfirm:   'ตัดสต็อกอะไหล่ที่ใช้ในใบสั่งซ่อมนี้? ไม่สามารถกู้คืนได้',
-    fulfillSuccess:   'ตัดสต็อกเรียบร้อย',
-    alreadyFulfilled: 'ตัดสต็อกแล้ว',
+    fulfillParts:       'ตัดสต็อก',
+    fulfillConfirm:     'ตัดสต็อกอะไหล่ที่ใช้ในใบสั่งซ่อมนี้? ไม่สามารถกู้คืนได้',
+    fulfillSuccess:     'ตัดสต็อกเรียบร้อย',
+    alreadyFulfilled:   'ตัดสต็อกแล้ว',
+    completeJobTitle:   'ปิดงาน',
+    completeJobDesc:    'ยืนยันปิดงานและตัดสต็อกอะไหล่ที่ใช้ในใบสั่งซ่อม ไม่สามารถกู้คืนได้',
+    completeAndDeduct:  'ปิดงานและตัดสต็อก',
+    autoDeductSuccess:  'ปิดงานสำเร็จ – ตัดสต็อกเรียบร้อย',
+    colBooked:          'จอง',
+    bookedTooltip:      'จองสำหรับงานที่ยังไม่ตัดสต็อก',
+    insufficientStockTitle:  'สต็อกไม่เพียงพอ',
+    insufficientStockDesc:   'อะไหล่ต่อไปนี้มีในสต็อกไม่เพียงพอสำหรับปิดงานนี้:',
+    insufficientStockFooter: 'กรุณาเติมสต็อกอะไหล่ด้านบนก่อนทำการปิดงาน',
+    insufficientStockNeed:   'ต้องการ',
+    insufficientStockHave:   'มีในสต็อก',
 
     // Stock Log
     stockLog:           'ประวัติสต็อก',
@@ -420,10 +480,14 @@ const TRANSLATIONS = {
     noLogEntries:       'ยังไม่มีประวัติสต็อก',
     logReasonInitial:   'สต็อกเริ่มต้น',
     logReasonAdjusted:  'ปรับยอดด้วยตนเอง',
+    logReasonRestock:   'รับเข้าสต็อก',
     logReasonOrder:     'ตัดสต็อกจากใบสั่งซ่อม',
+    logReasonOrderEdit: 'แก้ไขใบสั่งซ่อม',
     close:              'ปิด',
 
-    // Common
+    // Stock History page
+    stockHistoryTitle:   'ประวัติการเคลื่อนไหวสต็อก',
+    searchStockHistory:  'ค้นหาตามชื่ออะไหล่ รหัส หรือเหตุผล…',
     save:   'บันทึก',
     cancel: 'ยกเลิก',
   },

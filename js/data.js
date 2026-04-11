@@ -89,24 +89,48 @@ function migrateCustomers(customers) {
 }
 
 /* ══════════════════════════════════════
- *  STATE — loaded from localStorage
- *  or seeded on first visit.
+ *  SERVER LOAD — synchronous XHR so that
+ *  State can be initialised normally.
+ *  Falls back to localStorage when the
+ *  Python server is not running.
+ * ══════════════════════════════════════ */
+function _loadFromServer() {
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/data', false); // false = synchronous
+    xhr.send();
+    if (xhr.status === 200) return JSON.parse(xhr.responseText);
+  } catch (e) { /* server not running — that's OK */ }
+  return null;
+}
+const _srv = _loadFromServer();
+
+/* ══════════════════════════════════════
+ *  STATE — server file has priority;
+ *  localStorage is the fallback.
  * ══════════════════════════════════════ */
 const State = {
-  parts:     load('ars_parts',     SEED_PARTS),
-  orders:    load('ars_orders',    SEED_ORDERS),
-  customers: migrateCustomers(load('ars_customers', SEED_CUSTOMERS)),
-  stockLog:  load('ars_stock_log', []),
+  parts:     _srv?.parts     ?? load('ars_parts',     SEED_PARTS),
+  orders:    _srv?.orders    ?? load('ars_orders',    SEED_ORDERS),
+  customers: migrateCustomers(_srv?.customers ?? load('ars_customers', SEED_CUSTOMERS)),
+  stockLog:  _srv?.stockLog  ?? load('ars_stock_log', []),
 
   // Current page
   page: 'dashboard',
 
-  /** Save all collections to localStorage */
+  /** Save all collections to localStorage AND the server file on disk */
   save() {
     persist('ars_parts',     this.parts);
     persist('ars_orders',    this.orders);
     persist('ars_customers', this.customers);
     persist('ars_stock_log', this.stockLog);
+    // Mirror to disk via Python server (fire-and-forget)
+    saveToServer({
+      parts:     this.parts,
+      orders:    this.orders,
+      customers: this.customers,
+      stockLog:  this.stockLog,
+    });
   },
 };
 
@@ -155,4 +179,56 @@ function totalRevenue(orders) {
 /** Unique categories from parts list */
 function partCategories() {
   return ['All', ...new Set(State.parts.map(p => p.category))];
+}
+
+/**
+ * checkPartsStock(partsUsed)
+ * Returns an array of shortage objects for every part that does not have
+ * enough physical stock to cover the requested qty.
+ * { name, required, available }   — empty array means all parts are OK.
+ */
+function checkPartsStock(partsUsed) {
+  const shortages = [];
+  partsUsed.forEach(pu => {
+    if (!pu.partId) return;
+    const pt = State.parts.find(p => p.id === pu.partId);
+    if (pt && pt.qty < pu.qty) {
+      shortages.push({ name: pu.partName, required: pu.qty, available: pt.qty });
+    }
+  });
+  return shortages;
+}
+
+/**
+ * checkPartsStockAfterReversal(newParts, oldParts)
+ * Used when editing a fulfilled order: simulates adding oldParts back to stock
+ * first, then checks whether newParts can be deducted from the resulting qty.
+ * Returns shortage objects for any part still insufficient after the reversal.
+ */
+function checkPartsStockAfterReversal(newParts, oldParts) {
+  const shortages = [];
+  newParts.forEach(pu => {
+    if (!pu.partId) return;
+    const pt = State.parts.find(p => p.id === pu.partId);
+    if (!pt) return;
+    const oldPu = oldParts.find(p => p.partId === pu.partId);
+    const effectiveStock = pt.qty + (oldPu ? oldPu.qty : 0);
+    if (effectiveStock < pu.qty) {
+      shortages.push({ name: pu.partName, required: pu.qty, available: effectiveStock });
+    }
+  });
+  return shortages;
+}
+
+/**
+ * Total qty of a part currently booked (reserved) in unfulfilled
+ * pending or in-progress orders — not yet deducted from stock.
+ */
+function bookedQty(partId) {
+  return State.orders
+    .filter(o => o.fulfilled !== true && (o.status === 'pending' || o.status === 'in-progress'))
+    .reduce((sum, o) => {
+      const pu = o.partsUsed.find(p => p.partId === partId);
+      return sum + (pu ? pu.qty : 0);
+    }, 0);
 }
