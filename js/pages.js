@@ -252,12 +252,16 @@ function renderDashboard() {
   const lowStock  = lowStockParts();
   const invValue  = parts.reduce((s, p) => s + p.cost * p.qty, 0);
 
-  // Revenue last 7 days
-  const revByDay = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
-    const dayRev = orders.filter(o => o.date === d).reduce((s, o) => s + orderTotal(o), 0);
-    revByDay.push({ label: d.slice(5), value: dayRev });
+  // Revenue last 6 months (bar chart)
+  const revByMonth = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    const ym    = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const lbl   = d.toLocaleString(getLang() === 'th' ? 'th-TH' : 'en-US', { month: 'short' });
+    const mRev  = orders.filter(o => o.date.startsWith(ym)).reduce((s, o) => s + orderTotal(o), 0);
+    revByMonth.push({ label: lbl, value: mRev, displayValue: fmtCurrency(mRev) });
   }
 
   // Parts by category
@@ -265,7 +269,7 @@ function renderDashboard() {
   parts.forEach(p => { catMap[p.category] = (catMap[p.category] || 0) + p.qty; });
   const byCategory = Object.entries(catMap).map(([label, value]) => ({ label, value }));
 
-  // Sparkline: daily orders last 14 days
+  // Sparkline: orders last 14 days
   const spark = [];
   for (let i = 13; i >= 0; i--) {
     const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
@@ -325,7 +329,7 @@ function renderDashboard() {
       </div>
 
       <div class="charts-row">
-        <div class="chart-card">${renderBarChart(revByDay, { label: t('revenueLastDays') })}</div>
+        <div class="chart-card">${renderBarChart(revByMonth, { label: t('revenueLastDays') })}</div>
         <div class="chart-card">${renderDonutChart(byCategory, { label: t('stockByCategory') })}</div>
       </div>
 
@@ -437,10 +441,10 @@ function openPartForm(id) {
       <label>${t('partNameLabel')}<input id="pf-name" value="${p.name}" oninput="this.classList.remove('input-error')"/></label>
       <label>${t('categoryLabel')}<input id="pf-cat" value="${p.category}" placeholder="${t('catPlaceholder')}"/></label>
       <label>${t('unitLabel')}<input id="pf-unit" value="${p.unit}" placeholder="${t('unitPlaceholder')}"/></label>
-      <label>${t('costLabel')}<input id="pf-cost" type="number" value="${p.cost}"/></label>
-      <label>${t('priceLabel')}<input id="pf-price" type="number" value="${p.price}"/></label>
-      <label>${t('qtyLabel')}<input id="pf-qty" type="number" value="${p.qty}"/></label>
-      <label>${t('reorderLevelLabel')}<input id="pf-reorder" type="number" value="${p.reorder}"/></label>
+      <label>${t('costLabel')}<input id="pf-cost" type="number" min="0" step="0.01" value="${p.cost || ''}" placeholder="0" onfocus="if(+this.value===0)this.value=''"/></label>
+      <label>${t('priceLabel')}<input id="pf-price" type="number" min="0" step="0.01" value="${p.price || ''}" placeholder="0" onfocus="if(+this.value===0)this.value=''"/></label>
+      <label>${t('qtyLabel')}<input id="pf-qty" type="number" min="0" value="${p.qty || ''}" placeholder="0" onfocus="if(+this.value===0)this.value=''"/></label>
+      <label>${t('reorderLevelLabel')}<input id="pf-reorder" type="number" min="0" value="${p.reorder || ''}" placeholder="0" onfocus="if(+this.value===0)this.value=''"/></label>
     </div>
     <div class="form-actions">
       <button class="btn" onclick="closeModal()">${t('cancel')}</button>
@@ -1183,8 +1187,18 @@ function openOrderForm(id) {
     <div id="of-parts-lines"></div>
     <button class="btn btn-sm" onclick="addOrderPartLine()">${icon('plus', 14)} ${t('addPartLine')}</button>
     <div class="form-grid" style="margin-top:16px">
-      <label>${t('laborLabel')}<input id="of-labor" type="number" value="${o.laborCost}" oninput="recalcOrderTotal()"/></label>
-      <label>${t('discountLabel')}<input id="of-discount" type="number" value="${o.discount}" oninput="recalcOrderTotal()"/></label>
+      <label>${t('laborLabel')}<input id="of-labor" type="number" min="0" value="${o.laborCost || ''}" placeholder="0" onfocus="if(+this.value===0)this.value=''" oninput="recalcOrderTotal()"/></label>
+      <label>${t('discountLabel')}
+        <div style="display:flex;gap:6px">
+          <input id="of-discount" type="number" min="0" value="${o.discount || ''}" placeholder="0"
+            onfocus="if(+this.value===0)this.value=''" oninput="recalcOrderTotal()" style="flex:1"/>
+          <select id="of-disc-type" onchange="recalcOrderTotal()"
+            style="width:58px;padding:8px 4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:13px">
+            <option value="flat">฿</option>
+            <option value="pct">%</option>
+          </select>
+        </div>
+      </label>
       <label>${t('statusLabel')}
         <select id="of-status">
           <option value="pending" ${o.status === 'pending' ? 'selected' : ''}>${t('statusPending')}</option>
@@ -1239,11 +1253,17 @@ function updateOrderPartQty(i, qty) {
   renderOrderPartLines();
 }
 function recalcOrderTotal() {
-  const pc    = _orderPartsUsed.reduce((s, p) => s + p.unitPrice * p.qty, 0);
-  const labor = Number(document.getElementById('of-labor')?.value) || 0;
-  const disc  = Number(document.getElementById('of-discount')?.value) || 0;
+  const pc       = _orderPartsUsed.reduce((s, p) => s + p.unitPrice * p.qty, 0);
+  const labor    = Number(document.getElementById('of-labor')?.value)    || 0;
+  const discVal  = Number(document.getElementById('of-discount')?.value) || 0;
+  const discType = document.getElementById('of-disc-type')?.value || 'flat';
+  const disc     = discType === 'pct' ? (pc + labor) * discVal / 100 : discVal;
   const el = document.getElementById('of-total');
-  if (el) el.innerHTML = `${t('orderTotalLabel')}: <strong>${fmtCurrency(pc + labor - disc)}</strong>`;
+  if (el) {
+    const discNote = discType === 'pct' && discVal > 0
+      ? ` <span style="color:var(--text-muted);font-size:11px">(${discVal}% = ${fmtCurrency(disc)})</span>` : '';
+    el.innerHTML = `${t('orderTotalLabel')}: <strong>${fmtCurrency(pc + labor - disc)}</strong>${discNote}`;
+  }
 }
 
 function pickOrderCustomer() {
@@ -1304,10 +1324,16 @@ function saveOrder(id) {
   if (!g('#of-service')) { serviceEl?.classList.add('input-error'); if (valid) serviceEl?.focus(); valid = false; }
   if (!valid) return;
 
+  const laborCost  = n('#of-labor');
+  const discVal    = n('#of-discount');
+  const discType   = g('#of-disc-type');
+  const partsTotal = _orderPartsUsed.reduce((s, p) => s + p.unitPrice * p.qty, 0);
+  const discount   = discType === 'pct' ? (partsTotal + laborCost) * discVal / 100 : discVal;
+
   const data = {
     date: g('#of-date'), customerId: cid, customerName,
     vehicle: g('#of-vehicle'), plate: g('#of-plate'), service: g('#of-service'),
-    partsUsed: _orderPartsUsed, laborCost: n('#of-labor'), discount: n('#of-discount'),
+    partsUsed: _orderPartsUsed, laborCost, discount,
     status: g('#of-status'), notes: g('#of-notes'),
   };
 

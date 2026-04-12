@@ -3,21 +3,53 @@
  * charts.js — SVG Chart Renderers (zero dependencies)
  * ============================================================
  *
- * Pure SVG chart generators.  Each returns an HTML string that
- * can be inserted via innerHTML.
+ * Pure SVG chart generators with hover interactivity.
  *
  *   renderBarChart(data, opts)    — vertical bar chart
  *   renderDonutChart(data, opts)  — donut / ring chart
  *   renderSparkline(data, opts)   — tiny inline trend line
  *
- * Developer: no charting library is needed. If you want to swap
- * to Chart.js later, replace these functions and keep the same
- * API signatures so pages.js doesn't need changes.
+ * Each chart element fires global chartTooltip* functions on hover.
  */
+
+// ── Shared floating tooltip ──
+
+function _chartTooltip() {
+  let tip = document.getElementById('chart-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'chart-tooltip';
+    tip.className = 'chart-tooltip';
+    document.body.appendChild(tip);
+  }
+  return tip;
+}
+
+function chartTooltipShow(e, label, displayVal) {
+  const tip = _chartTooltip();
+  tip.innerHTML = `<span style="color:var(--text-muted);font-size:11px">${label}</span><br><strong style="font-size:13px">${displayVal}</strong>`;
+  tip.style.display = 'block';
+  chartTooltipMove(e);
+}
+
+function chartTooltipMove(e) {
+  const tip = _chartTooltip();
+  const x = e.clientX + 14;
+  const y = e.clientY - 40;
+  // Keep tooltip inside viewport
+  tip.style.left = Math.min(x, window.innerWidth  - 160) + 'px';
+  tip.style.top  = Math.max(y, 8) + 'px';
+}
+
+function chartTooltipHide() {
+  const tip = document.getElementById('chart-tooltip');
+  if (tip) tip.style.display = 'none';
+}
+
 
 /**
  * renderBarChart
- * @param {Array<{label:string, value:number, color?:string}>} data
+ * @param {Array<{label:string, value:number, displayValue?:string, color?:string}>} data
  * @param {Object} opts — { width, height, barColor, label }
  * @returns {string} HTML string
  */
@@ -43,12 +75,19 @@ function renderBarChart(data, opts = {}) {
   // Bars
   let bars = '';
   data.forEach((d, i) => {
-    const bh = (d.value / max) * (h - 40);
-    const x  = startX + i * ((w - 60) / data.length) + 4;
-    const y  = h - 30 - bh;
+    const bh         = (d.value / max) * (h - 40);
+    const x          = startX + i * ((w - 60) / data.length) + 4;
+    const y          = h - 30 - bh;
+    const tipVal     = d.displayValue || d.value.toLocaleString();
+    // Escape single quotes for inline attribute safety
+    const safeLabel  = d.label.replace(/'/g, '&#39;');
+    const safeTipVal = tipVal.replace(/'/g, '&#39;');
     bars += `
-      <rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="3" fill="${d.color || color}" opacity="0.85">
-        <title>${d.label}: ${d.value.toLocaleString()}</title>
+      <rect class="chart-bar" x="${x}" y="${y}" width="${barW}" height="${Math.max(bh, 2)}" rx="3"
+        fill="${d.color || color}" opacity="0.85"
+        onmouseover="chartTooltipShow(event,'${safeLabel}','${safeTipVal}')"
+        onmousemove="chartTooltipMove(event)"
+        onmouseout="chartTooltipHide()">
       </rect>
       <text x="${x + barW / 2}" y="${h - 14}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${d.label}</text>
     `;
@@ -73,33 +112,45 @@ function renderBarChart(data, opts = {}) {
  * @returns {string} HTML string
  */
 function renderDonutChart(data, opts = {}) {
-  const size  = opts.size  || 180;
-  const label = opts.label || '';
-  const total = data.reduce((s, d) => s + d.value, 0) || 1;
-  const r     = size * 0.35;
-  const c     = Math.PI * 2 * r;
-  const colors = ['#f97316','#3b82f6','#10b981','#8b5cf6','#ef4444','#eab308','#ec4899','#14b8a6'];
+  const size   = opts.size  || 180;
+  const label  = opts.label || '';
+  const total  = data.reduce((s, d) => s + d.value, 0) || 1;
+  const r      = size * 0.35;
+  const c      = Math.PI * 2 * r;
+  const sw     = size * 0.15; // normal stroke-width
+  const colors = ['#f97316','#3b82f6','#10b981','#8b5cf6','#ef4444','#eab308','#ec4899','#14b8a6','#f59e0b','#06b6d4'];
 
   let circles = '';
   let offset  = 0;
   data.forEach((d, i) => {
-    const pct  = d.value / total;
-    const dash = pct * c;
-    const gap  = c - dash;
+    const pct       = d.value / total;
+    const dash      = pct * c;
+    const gap       = c - dash;
+    const safeLabel = d.label.replace(/'/g, '&#39;');
     circles += `
-      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none"
-        stroke="${colors[i % colors.length]}" stroke-width="${size * 0.15}"
+      <circle class="donut-seg" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none"
+        stroke="${colors[i % colors.length]}" stroke-width="${sw}"
         stroke-dasharray="${dash} ${gap}" stroke-dashoffset="${-offset}"
-        style="transition:stroke-dasharray .6s">
-        <title>${d.label}: ${d.value}</title>
+        onmouseover="chartTooltipShow(event,'${safeLabel}','${d.value}')"
+        onmousemove="chartTooltipMove(event)"
+        onmouseout="chartTooltipHide()">
       </circle>
     `;
     offset += dash;
   });
 
-  let legend = data.map((d, i) =>
-    `<span class="legend-item"><span class="legend-dot" style="background:${colors[i % colors.length]}"></span>${d.label} (${d.value})</span>`
-  ).join('');
+  const legend = data.map((d, i) => {
+    const safeLabel = d.label.replace(/'/g, '&#39;');
+    return `
+      <span class="legend-item"
+        onmouseover="chartTooltipShow(event,'${safeLabel}','${d.value}')"
+        onmousemove="chartTooltipMove(event)"
+        onmouseout="chartTooltipHide()">
+        <span class="legend-dot" style="background:${colors[i % colors.length]}"></span>
+        ${d.label} (${d.value})
+      </span>
+    `;
+  }).join('');
 
   return `
     <div class="chart-wrap">

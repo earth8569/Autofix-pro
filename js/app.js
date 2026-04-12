@@ -35,6 +35,7 @@ const PAGE_RENDERERS = {
 function navigateTo(pageKey) {
   State.page = pageKey;
   renderNav();
+  const content = document.getElementById('main-content');
   const renderer = PAGE_RENDERERS[pageKey];
   if (renderer) renderer();
   closeSidebar();
@@ -77,19 +78,31 @@ function renderNav() {
 
 // ── Mobile sidebar helpers ──
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
+  const sidebar  = document.getElementById('sidebar');
+  const overlay  = document.getElementById('sidebar-overlay');
+  sidebar.classList.toggle('open');
+  if (overlay) overlay.classList.toggle('open', sidebar.classList.contains('open'));
 }
 function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (overlay) overlay.classList.remove('open');
 }
 
 // ── Boot: check auth on page load ──
 document.addEventListener('DOMContentLoaded', () => {
   updateLangUI();
   if (isLoggedIn()) {
-    // Already authenticated this session — show app
-    document.querySelector('.app-shell').style.display = 'flex';
+    // Already authenticated this session — show app with a soft fade-in
+    const shell = document.querySelector('.app-shell');
+    shell.style.display = 'flex';
+    shell.style.opacity = '0';
+    shell.style.transition = 'opacity 0.35s ease';
     bootApp();
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      shell.style.opacity = '1';
+      setTimeout(() => { shell.style.opacity = ''; shell.style.transition = ''; }, 400);
+    }));
   } else {
     // Show login screen
     showLoginScreen();
