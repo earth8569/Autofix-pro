@@ -30,6 +30,96 @@ let _pendingOrderEdit = null;
 // Pending new-part data when a duplicate SKU choice modal is open
 let _pendingNewPart = null;
 
+// ── Per-table sort state ──
+const _partsSort     = { col: '', dir: 'asc' };
+const _ordersSort    = { col: '', dir: 'asc' };
+const _customersSort = { col: '', dir: 'asc' };
+const _stockSort     = { col: '', dir: 'asc' };
+
+/** Toggle sort column/direction, then trigger a re-sort. */
+function _toggleSort(state, col) {
+  if (state.col === col) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+  else { state.col = col; state.dir = 'asc'; }
+}
+
+/** Update ↑/↓/↕ icons and active class on sortable <th> elements. */
+function _updateSortHeaders(tbodyId, state) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  tbody.closest('table').querySelectorAll('thead th[data-sort]').forEach(th => {
+    const active = th.dataset.sort === state.col;
+    th.classList.toggle('sort-active', active);
+    const icon = th.querySelector('.sort-icon');
+    if (icon) icon.textContent = active ? (state.dir === 'asc' ? '↑' : '↓') : '↕';
+  });
+}
+
+/** Sort an array by a column; valFn(row, col) extracts the sort value. */
+function _sortArr(arr, state, valFn) {
+  if (!state.col) return arr;
+  const { col, dir } = state;
+  return [...arr].sort((a, b) => {
+    const va = valFn ? valFn(a, col) : a[col];
+    const vb = valFn ? valFn(b, col) : b[col];
+    if (typeof va === 'number' && typeof vb === 'number')
+      return dir === 'asc' ? va - vb : vb - va;
+    return dir === 'asc'
+      ? String(va ?? '').localeCompare(String(vb ?? ''))
+      : String(vb ?? '').localeCompare(String(va ?? ''));
+  });
+}
+
+function sortPartsBy(col)     { _toggleSort(_partsSort, col);     _updateSortHeaders('parts-tbody',  _partsSort);     filterPartsTable(); }
+function sortOrdersBy(col)    { _toggleSort(_ordersSort, col);    _updateSortHeaders('orders-tbody', _ordersSort);    filterOrdersTable(); }
+function sortCustomersBy(col) { _toggleSort(_customersSort, col); _updateSortHeaders('cust-tbody',   _customersSort); filterCustomersTable(); }
+function sortStockBy(col)     { _toggleSort(_stockSort, col);     _updateSortHeaders('sh-tbody',     _stockSort);     filterStockHistory(); }
+
+// ── Vehicle brand lists ──
+const VEHICLE_BRANDS = {
+  car:  ['Toyota','Honda','Isuzu','Mitsubishi','Nissan','Ford','Mazda','Suzuki',
+         'Hyundai','Kia','MG','BYD','BMW','Mercedes-Benz','Audi','Volkswagen',
+         'Subaru','Chevrolet','Volvo','Lexus','Porsche','Jeep'],
+  moto: ['Honda','Yamaha','Kawasaki','Suzuki','Ducati','Harley-Davidson','KTM',
+         'Royal Enfield','Triumph','BMW','Aprilia','Benelli'],
+};
+
+/**
+ * parseBrandModel(vehicleStr)
+ * Splits "Toyota Vios 2020" → { type:'car', brand:'Toyota', otherBrand:'', model:'Vios 2020' }
+ * Unknown brands return { type:'', brand:'__other__', otherBrand:'...', model:'...' }
+ */
+function parseBrandModel(vehicleStr) {
+  const str = (vehicleStr || '').trim();
+  for (const b of VEHICLE_BRANDS.car) {
+    if (str.toLowerCase() === b.toLowerCase()) return { type: 'car', brand: b, otherBrand: '', model: '' };
+    if (str.toLowerCase().startsWith(b.toLowerCase() + ' '))
+      return { type: 'car', brand: b, otherBrand: '', model: str.slice(b.length).trim() };
+  }
+  for (const b of VEHICLE_BRANDS.moto) {
+    if (str.toLowerCase() === b.toLowerCase()) return { type: 'moto', brand: b, otherBrand: '', model: '' };
+    if (str.toLowerCase().startsWith(b.toLowerCase() + ' '))
+      return { type: 'moto', brand: b, otherBrand: '', model: str.slice(b.length).trim() };
+  }
+  const spaceIdx = str.indexOf(' ');
+  if (spaceIdx > 0)
+    return { type: '', brand: '__other__', otherBrand: str.slice(0, spaceIdx), model: str.slice(spaceIdx + 1).trim() };
+  return { type: '', brand: str ? '__other__' : '', otherBrand: str, model: '' };
+}
+
+/** Returns <option> HTML for the brand <select>, filtered to the chosen type. */
+function _brandSelectOptions(selectedBrand, type) {
+  const list = type === 'car' ? VEHICLE_BRANDS.car
+             : type === 'moto' ? VEHICLE_BRANDS.moto
+             : [];
+  const opts = list.map(b =>
+    `<option value="${b}" ${b === selectedBrand ? 'selected' : ''}>${b}</option>`).join('');
+  return `
+    <option value="">${t('selectBrand')}</option>
+    ${opts}
+    <option value="__other__" ${selectedBrand === '__other__' ? 'selected' : ''}>${t('otherBrand')}</option>
+  `;
+}
+
 /**
  * showInsufficientStock(shortages)
  * Displays a modal listing every part that has insufficient stock.
@@ -176,12 +266,17 @@ function renderParts() {
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr>
-            <th>${t('colSku')}</th><th>${t('colPartName')}</th>
-            <th>${t('colCategory')}</th><th>${t('colUnit')}</th>
-            <th>${t('colCost')}</th><th>${t('colPrice')}</th>
-            <th>${t('colMargin')}</th><th>${t('colQty')}</th>
-            <th title="${t('bookedTooltip')}">${t('colBooked')}</th>
-            <th>${t('colStatus')}</th><th style="width:110px">${t('colActions')}</th>
+            <th class="sortable" data-sort="sku"      onclick="sortPartsBy('sku')"     >${t('colSku')}      <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="name"     onclick="sortPartsBy('name')"    >${t('colPartName')} <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="category" onclick="sortPartsBy('category')">${t('colCategory')} <span class="sort-icon">↕</span></th>
+            <th>${t('colUnit')}</th>
+            <th class="sortable" data-sort="cost"     onclick="sortPartsBy('cost')"    >${t('colCost')}     <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="price"    onclick="sortPartsBy('price')"   >${t('colPrice')}    <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="margin"   onclick="sortPartsBy('margin')"  >${t('colMargin')}   <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="qty"      onclick="sortPartsBy('qty')"     >${t('colQty')}      <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="booked"   onclick="sortPartsBy('booked')"  title="${t('bookedTooltip')}">${t('colBooked')} <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="status"   onclick="sortPartsBy('status')"  >${t('colStatus')}   <span class="sort-icon">↕</span></th>
+            <th style="width:110px">${t('colActions')}</th>
           </tr></thead>
           <tbody id="parts-tbody"></tbody>
         </table>
@@ -197,10 +292,16 @@ function filterPartsTable() {
   const catRaw = document.getElementById('part-cat-filter')?.value || '';
   // Map translated "ทั้งหมด" back to 'All' for filtering
   const cat = (catRaw === t('all') || catRaw === 'All') ? 'All' : catRaw;
-  const filtered = State.parts.filter(p => {
+  let filtered = State.parts.filter(p => {
     if (cat !== 'All' && p.category !== cat) return false;
     if (search && !(p.name + ' ' + p.sku).toLowerCase().includes(search)) return false;
     return true;
+  });
+  filtered = _sortArr(filtered, _partsSort, (p, col) => {
+    if (col === 'margin') return p.price - p.cost;
+    if (col === 'booked') return bookedQty(p.id);
+    if (col === 'status') return p.qty <= p.reorder ? 0 : 1; // low=0 sorts first asc
+    return p[col];
   });
   const tbody = document.getElementById('parts-tbody');
   if (!filtered.length) {
@@ -298,7 +399,7 @@ function savePart(id) {
     const newId = uid();
     State.parts.push({ id: newId, ...data });
     if (data.qty > 0) {
-      logStockMove(newId, 'in', data.qty, 0, data.qty, t('logReasonInitial'));
+      logStockMove(newId, 'in', data.qty, 0, data.qty, 'logReasonInitial');
     }
     showToast(t('partAdded'));
     State.save();
@@ -443,7 +544,7 @@ function saveRestock(id) {
 
   p.qty += addQty;
   logStockMove(p.id, 'in', addQty, balanceBefore, p.qty,
-    `${t('logReasonRestock')} @ ${fmtCurrency(buyCost)}`);
+    `logReasonRestock|${buyCost}`);
   State.save();
   closeModal();
   showToast(t('restockSuccess'));
@@ -491,7 +592,7 @@ function savePartForced() {
   const newId = uid();
   State.parts.push({ id: newId, ...data });
   if (data.qty > 0) {
-    logStockMove(newId, 'in', data.qty, 0, data.qty, t('logReasonInitial'));
+    logStockMove(newId, 'in', data.qty, 0, data.qty, 'logReasonInitial');
   }
   showToast(t('partAdded'));
   State.save();
@@ -562,7 +663,7 @@ function confirmAdminPartSave() {
   if (idx !== -1) {
     State.parts[idx] = { ...State.parts[idx], ...data };
     const diff = data.qty - oldQty;
-    logStockMove(id, diff > 0 ? 'in' : 'out', Math.abs(diff), oldQty, data.qty, t('logReasonAdjusted'));
+    logStockMove(id, diff > 0 ? 'in' : 'out', Math.abs(diff), oldQty, data.qty, 'logReasonAdjusted');
   }
   State.save();
   closeModal();
@@ -651,7 +752,7 @@ function confirmAdminOrderSave() {
     if (pt) {
       const before = pt.qty;
       pt.qty += pu.qty;
-      logStockMove(pt.id, 'in', pu.qty, before, pt.qty, `${t('logReasonOrderEdit')}: ${data.service}`);
+      logStockMove(pt.id, 'in', pu.qty, before, pt.qty, `logReasonOrderEdit|${data.service}`);
     }
   });
 
@@ -662,7 +763,7 @@ function confirmAdminOrderSave() {
     if (pt) {
       const before = pt.qty;
       pt.qty = Math.max(0, pt.qty - pu.qty);
-      logStockMove(pt.id, 'out', pu.qty, before, pt.qty, `${t('logReasonOrderEdit')}: ${data.service}`);
+      logStockMove(pt.id, 'out', pu.qty, before, pt.qty, `logReasonOrderEdit|${data.service}`);
     }
   });
 
@@ -672,6 +773,27 @@ function confirmAdminOrderSave() {
   closeModal();
   showToast(t('orderUpdated'));
   renderOrders();
+}
+
+/**
+ * Translates a stored reason string to the active language.
+ * New format: "logReasonKey|arg"  (pipe separates key from optional arg)
+ * Old format: raw translated text — returned as-is for backward compatibility.
+ */
+function translateReason(reason) {
+  if (!reason) return '';
+  const pipeIdx = reason.indexOf('|');
+  if (pipeIdx > -1) {
+    const key = reason.slice(0, pipeIdx);
+    const arg = reason.slice(pipeIdx + 1);
+    const base = TRANSLATIONS[getLang()]?.[key];
+    if (!base) return reason; // unknown key — show raw
+    if (key === 'logReasonRestock') return `${base} @ ${fmtCurrency(parseFloat(arg))}`;
+    return arg ? `${base}: ${arg}` : base;
+  }
+  // No pipe — check if it's a bare key (no arg)
+  const bare = TRANSLATIONS[getLang()]?.[reason];
+  return bare ?? reason; // bare key → translate; unknown → show raw (old data)
 }
 
 /** Opens a modal showing the full stock in/out log for a part. */
@@ -695,7 +817,7 @@ function openStockLog(partId) {
           <td style="text-align:center">${change}</td>
           <td style="text-align:center">${e.balanceBefore}</td>
           <td style="text-align:center;font-weight:600">${e.balanceAfter}</td>
-          <td style="font-size:12px;color:var(--text-muted)">${e.reason}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${translateReason(e.reason)}</td>
         </tr>`;
       }).join('')
     : `<tr><td colspan="6" class="empty">${t('noLogEntries')}</td></tr>`;
@@ -759,13 +881,13 @@ function renderStockHistory() {
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr>
-            <th>${t('logColDate')}</th>
-            <th>${t('colPartName')}</th>
-            <th>${t('colSku')}</th>
-            <th>${t('logColType')}</th>
-            <th style="text-align:center">${t('logColQty')}</th>
-            <th style="text-align:center">${t('logColBefore')}</th>
-            <th style="text-align:center">${t('logColAfter')}</th>
+            <th class="sortable" data-sort="date"          onclick="sortStockBy('date')"         >${t('logColDate')}   <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="partName"      onclick="sortStockBy('partName')"     >${t('colPartName')}  <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="partSku"       onclick="sortStockBy('partSku')"      >${t('colSku')}       <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="type"          onclick="sortStockBy('type')"         >${t('logColType')}   <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="qty" style="text-align:center" onclick="sortStockBy('qty')"          >${t('logColQty')}    <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="balanceBefore" onclick="sortStockBy('balanceBefore')" style="text-align:center">${t('logColBefore')} <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="balanceAfter"  onclick="sortStockBy('balanceAfter')"  style="text-align:center">${t('logColAfter')}  <span class="sort-icon">↕</span></th>
             <th>${t('logColReason')}</th>
           </tr></thead>
           <tbody id="sh-tbody"></tbody>
@@ -794,6 +916,7 @@ function filterStockHistory() {
   if (search)         entries = entries.filter(e =>
     (e.partName + ' ' + e.partSku + ' ' + e.reason).toLowerCase().includes(search)
   );
+  entries = _sortArr(entries, _stockSort);
 
   const tbody = document.getElementById('sh-tbody');
   if (!tbody) return;
@@ -819,7 +942,7 @@ function filterStockHistory() {
       <td style="text-align:center">${change}</td>
       <td style="text-align:center;color:var(--text-muted)">${e.balanceBefore}</td>
       <td style="text-align:center;font-weight:600">${e.balanceAfter}</td>
-      <td style="font-size:12px;color:var(--text-muted)">${e.reason}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${translateReason(e.reason)}</td>
     </tr>`;
   }).join('');
 }
@@ -847,10 +970,14 @@ function renderOrders() {
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr>
-            <th>${t('colDate')}</th><th>${t('colCustomer')}</th>
-            <th>${t('colVehicle')}</th><th>${t('colService')}</th>
-            <th>${t('colParts')}</th><th>${t('colLabor')}</th>
-            <th>${t('colTotal')}</th><th>${t('colStatus')}</th>
+            <th class="sortable" data-sort="date"         onclick="sortOrdersBy('date')"        >${t('colDate')}     <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="customerName" onclick="sortOrdersBy('customerName')">${t('colCustomer')} <span class="sort-icon">↕</span></th>
+            <th>${t('colVehicle')}</th>
+            <th class="sortable" data-sort="service"      onclick="sortOrdersBy('service')"     >${t('colService')}  <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="partsCost"    onclick="sortOrdersBy('partsCost')"   >${t('colParts')}    <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="laborCost"    onclick="sortOrdersBy('laborCost')"   >${t('colLabor')}    <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="total"        onclick="sortOrdersBy('total')"       >${t('colTotal')}    <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="status"       onclick="sortOrdersBy('status')"      >${t('colStatus')}   <span class="sort-icon">↕</span></th>
             <th style="width:120px">${t('colActions')}</th>
           </tr></thead>
           <tbody id="orders-tbody"></tbody>
@@ -866,10 +993,15 @@ function filterOrdersTable() {
   const status = document.getElementById('order-status-filter')?.value || 'All';
   const statusColors = { pending: 'badge-warn', 'in-progress': 'badge-info', completed: 'badge-ok' };
 
-  const filtered = State.orders.filter(o => {
+  let filtered = State.orders.filter(o => {
     if (status !== 'All' && o.status !== status) return false;
     if (search && !(o.customerName + ' ' + o.service + ' ' + o.plate).toLowerCase().includes(search)) return false;
     return true;
+  });
+  filtered = _sortArr(filtered, _ordersSort, (o, col) => {
+    if (col === 'partsCost') return o.partsUsed.reduce((s, p) => s + p.unitPrice * p.qty, 0);
+    if (col === 'total')     return orderTotal(o);
+    return o[col];
   });
 
   const tbody = document.getElementById('orders-tbody');
@@ -1106,7 +1238,7 @@ function saveOrder(id) {
         if (pt) {
           const oldQty = pt.qty;
           pt.qty = Math.max(0, pt.qty - pu.qty);
-          logStockMove(pt.id, 'out', pu.qty, oldQty, pt.qty, `${t('logReasonOrder')}: ${data.service}`);
+          logStockMove(pt.id, 'out', pu.qty, oldQty, pt.qty, `logReasonOrder|${data.service}`);
         }
       });
       State.save();
@@ -1139,7 +1271,7 @@ function saveOrder(id) {
         if (pt) {
           const oldQty = pt.qty;
           pt.qty = Math.max(0, pt.qty - pu.qty);
-          logStockMove(pt.id, 'out', pu.qty, oldQty, pt.qty, `${t('logReasonOrder')}: ${data.service}`);
+          logStockMove(pt.id, 'out', pu.qty, oldQty, pt.qty, `logReasonOrder|${data.service}`);
         }
       });
       showToast(t('autoDeductSuccess'));
@@ -1189,7 +1321,7 @@ function doFulfillOrderParts(id) {
     if (pt) {
       const oldQty = pt.qty;
       pt.qty = Math.max(0, pt.qty - pu.qty);
-      logStockMove(pt.id, 'out', pu.qty, oldQty, pt.qty, `${t('logReasonOrder')}: ${o.service}`);
+      logStockMove(pt.id, 'out', pu.qty, oldQty, pt.qty, `logReasonOrder|${o.service}`);
     }
   });
   o.fulfilled = true;
@@ -1226,10 +1358,14 @@ function renderCustomers() {
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr>
-            <th>${t('colName')}</th><th>${t('colPhone')}</th>
-            <th>${t('colVehicle')}</th><th>${t('colPlate')}</th>
-            <th>${t('colOrders')}</th><th>${t('colTotalSpent')}</th>
-            <th>${t('colNotes')}</th><th style="width:90px">${t('colActions')}</th>
+            <th class="sortable" data-sort="name"       onclick="sortCustomersBy('name')"      >${t('colName')}       <span class="sort-icon">↕</span></th>
+            <th>${t('colPhone')}</th>
+            <th>${t('colVehicle')}</th>
+            <th>${t('colPlate')}</th>
+            <th class="sortable" data-sort="orders"     onclick="sortCustomersBy('orders')"    >${t('colOrders')}     <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-sort="totalSpent" onclick="sortCustomersBy('totalSpent')">${t('colTotalSpent')} <span class="sort-icon">↕</span></th>
+            <th>${t('colNotes')}</th>
+            <th style="width:90px">${t('colActions')}</th>
           </tr></thead>
           <tbody id="cust-tbody"></tbody>
         </table>
@@ -1241,10 +1377,15 @@ function renderCustomers() {
 
 function filterCustomersTable() {
   const search = (document.getElementById('cust-search')?.value || '').toLowerCase();
-  const filtered = State.customers.filter(c => {
+  let filtered = State.customers.filter(c => {
     if (!search) return true;
     const vehicleText = (c.vehicles || []).map(v => v.vehicle + ' ' + v.plate).join(' ');
     return (c.name + ' ' + c.phone + ' ' + vehicleText).toLowerCase().includes(search);
+  });
+  filtered = _sortArr(filtered, _customersSort, (c, col) => {
+    if (col === 'orders')     return State.orders.filter(o => o.customerId === c.id).length;
+    if (col === 'totalSpent') return State.orders.filter(o => o.customerId === c.id).reduce((s, o) => s + orderTotal(o), 0);
+    return c[col];
   });
   const tbody = document.getElementById('cust-tbody');
   if (!filtered.length) {
@@ -1304,17 +1445,77 @@ function openCustomerForm(id) {
 function renderCustomerVehicleLines() {
   const container = document.getElementById('cf-vehicles-lines');
   if (!container) return;
-  container.innerHTML = _customerVehicles.map((v, i) => `
+  container.innerHTML = _customerVehicles.map((v, i) => {
+    const p = parseBrandModel(v.vehicle);
+    const showOther = p.brand === '__other__';
+    const brandDisabled = !p.type ? 'disabled' : '';
+    return `
     <div class="vehicle-line">
-      <input class="vi-model" placeholder="${t('vehicleModelLabel')}" value="${v.vehicle}"
-        oninput="updateCustomerVehicle(${i},'vehicle',this.value); this.classList.remove('input-error')"/>
-      <input class="vi-plate" placeholder="${t('licensePlateLabel')}" value="${v.plate}"
-        oninput="updateCustomerVehicle(${i},'plate',this.value)"/>
-      ${_customerVehicles.length > 1
-        ? `<button class="btn-icon danger" onclick="removeCustomerVehicle(${i})">${icon('x', 14)}</button>`
-        : ''}
-    </div>
-  `).join('');
+      <div class="vl-row">
+        <select class="vi-type" data-idx="${i}" onchange="onVehicleTypeChange(${i})">
+          <option value="">${t('selectVehicleType')}</option>
+          <option value="car" ${p.type === 'car' ? 'selected' : ''}>${t('typeCar')}</option>
+          <option value="moto" ${p.type === 'moto' ? 'selected' : ''}>${t('typeMoto')}</option>
+        </select>
+        <select class="vi-brand" data-idx="${i}" ${brandDisabled}
+          onchange="onVehicleBrandChange(${i}); this.classList.remove('input-error')">
+          ${_brandSelectOptions(p.brand, p.type)}
+        </select>
+        <input class="vi-brand-other" data-idx="${i}"
+          placeholder="${t('enterBrand')}"
+          value="${showOther ? p.otherBrand : ''}"
+          style="display:${showOther ? 'flex' : 'none'}"
+          oninput="updateVehicleValue(${i})"/>
+      </div>
+      <div class="vl-row">
+        <input class="vi-model-text" data-idx="${i}"
+          placeholder="${t('modelYearLabel')}"
+          value="${p.model}"
+          oninput="updateVehicleValue(${i}); this.classList.remove('input-error')"/>
+        <input class="vi-plate" placeholder="${t('licensePlateLabel')}" value="${v.plate}"
+          oninput="updateCustomerVehicle(${i},'plate',this.value)"/>
+        ${_customerVehicles.length > 1
+          ? `<button class="btn-icon danger" onclick="removeCustomerVehicle(${i})">${icon('x', 14)}</button>`
+          : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/** Reloads the brand dropdown when the type (Car/Motorcycle) changes. */
+function onVehicleTypeChange(i) {
+  const typeSel  = document.querySelector(`.vi-type[data-idx="${i}"]`);
+  const brandSel = document.querySelector(`.vi-brand[data-idx="${i}"]`);
+  const otherInp = document.querySelector(`.vi-brand-other[data-idx="${i}"]`);
+  if (!typeSel || !brandSel) return;
+  const type = typeSel.value;
+  brandSel.disabled = !type;
+  brandSel.innerHTML = _brandSelectOptions('', type); // reset brand selection
+  if (otherInp) { otherInp.style.display = 'none'; otherInp.value = ''; }
+  updateVehicleValue(i);
+}
+
+/** Shows/hides the "Other" brand text input and rebuilds vehicle string. */
+function onVehicleBrandChange(i) {
+  const brandSel  = document.querySelector(`.vi-brand[data-idx="${i}"]`);
+  const otherInp  = document.querySelector(`.vi-brand-other[data-idx="${i}"]`);
+  if (!brandSel || !otherInp) return;
+  const isOther = brandSel.value === '__other__';
+  otherInp.style.display = isOther ? 'flex' : 'none';
+  if (!isOther) otherInp.value = '';
+  updateVehicleValue(i);
+}
+
+/** Rebuilds the stored vehicle string from brand dropdown + model text input. */
+function updateVehicleValue(i) {
+  const brandSel  = document.querySelector(`.vi-brand[data-idx="${i}"]`);
+  const otherInp  = document.querySelector(`.vi-brand-other[data-idx="${i}"]`);
+  const modelInp  = document.querySelector(`.vi-model-text[data-idx="${i}"]`);
+  if (!brandSel || !modelInp) return;
+  const brand    = brandSel.value === '__other__'
+    ? (otherInp?.value.trim() || '') : brandSel.value;
+  const combined = [brand, modelInp.value.trim()].filter(Boolean).join(' ');
+  updateCustomerVehicle(i, 'vehicle', combined);
 }
 
 function addCustomerVehicle() {
@@ -1340,12 +1541,12 @@ function saveCustomer(id) {
     nameEl.focus();
     valid = false;
   }
-  // Ensure at least one vehicle with a model name
-  const firstModelEl = document.querySelector('#cf-vehicles-lines .vi-model');
+  // Ensure at least one vehicle with a brand selected
+  const firstBrandEl = document.querySelector('#cf-vehicles-lines .vi-brand');
   if (!_customerVehicles.length || !_customerVehicles[0].vehicle.trim()) {
-    if (firstModelEl) {
-      firstModelEl.classList.add('input-error');
-      if (valid) firstModelEl.focus();
+    if (firstBrandEl) {
+      firstBrandEl.classList.add('input-error');
+      if (valid) firstBrandEl.focus();
     }
     valid = false;
   }

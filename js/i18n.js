@@ -208,6 +208,15 @@ const TRANSLATIONS = {
     vehicleModelLabel:  'Vehicle',
     selectVehicle:      '— pick vehicle —',
     errVehicleRequired: 'Please add at least one vehicle.',
+    selectVehicleType:  '— Type —',
+    typeCar:            'Car',
+    typeMoto:           'Motorcycle',
+    selectBrand:        '— Select Brand —',
+    carBrands:          'Cars',
+    bikeBrands:         'Motorcycles',
+    enterBrand:         'Enter brand name',
+    modelYearLabel:     'Model & Year  e.g. Vios 2020',
+    otherBrand:         'Other…',
 
     // Fulfill parts (order actions)
     fulfillParts:       'Fulfill Parts',
@@ -448,6 +457,15 @@ const TRANSLATIONS = {
     vehicleModelLabel:  'รุ่นรถ',
     selectVehicle:      '— เลือกรถ —',
     errVehicleRequired: 'กรุณาเพิ่มรถอย่างน้อย 1 คัน',
+    selectVehicleType:  '— ประเภท —',
+    typeCar:            'รถยนต์',
+    typeMoto:           'มอเตอร์ไซค์',
+    selectBrand:        '— เลือกยี่ห้อ —',
+    carBrands:          'รถยนต์',
+    bikeBrands:         'รถจักรยานยนต์',
+    enterBrand:         'ระบุยี่ห้อ',
+    modelYearLabel:     'รุ่น & ปี  เช่น Vios 2020',
+    otherBrand:         'อื่นๆ…',
 
     // Fulfill parts (order actions)
     fulfillParts:       'ตัดสต็อก',

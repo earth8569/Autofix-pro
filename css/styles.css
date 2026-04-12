@@ -228,6 +228,14 @@ select:focus { border-color: var(--accent); }
   padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle;
 }
 .data-table tbody tr:hover { background: var(--bg-card-hover); }
+.data-table thead th.sortable {
+  cursor: pointer; user-select: none;
+  transition: color .15s;
+}
+.data-table thead th.sortable:hover { color: var(--text); }
+.data-table thead th.sort-active    { color: var(--accent); }
+.data-table thead th .sort-icon     { opacity: .4; font-size: 10px; margin-left: 3px; }
+.data-table thead th.sort-active .sort-icon { opacity: 1; }
 .data-table .mono       { font-family: var(--font-mono); font-size: 12px; }
 .data-table .bold       { font-weight: 600; }
 .data-table .accent-text { color: var(--accent); font-weight: 600; }
@@ -562,12 +570,18 @@ select:focus { border-color: var(--accent); }
 
 /* Vehicle lines in customer form */
 .vehicle-line {
-  display: flex; gap: 8px; align-items: center; margin-bottom: 8px;
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;
+  padding: 10px 12px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
-.vehicle-line input {
-  background: var(--bg); border: 1px solid var(--border);
+.vehicle-line .vl-row { display: flex; gap: 6px; align-items: center; }
+.vehicle-line input, .vehicle-line select {
+  background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius-sm); color: var(--text);
   font-family: var(--font); font-size: 13px; padding: 7px 10px;
 }
-.vehicle-line .vi-model { flex: 1; }
-.vehicle-line .vi-plate { flex: 0 0 150px; font-family: var(--font-mono); }
+.vehicle-line .vi-type        { flex: 0 0 130px; }
+.vehicle-line .vi-brand       { flex: 1; }
+.vehicle-line .vi-brand-other { flex: 1; }
+.vehicle-line .vi-model-text  { flex: 1; }
+.vehicle-line .vi-plate { flex: 0 0 140px; font-family: var(--font-mono); }
