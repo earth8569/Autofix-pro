@@ -30,6 +30,112 @@ let _pendingOrderEdit = null;
 // Pending new-part data when a duplicate SKU choice modal is open
 let _pendingNewPart = null;
 
+/** Minimal HTML escaper — prevents XSS when interpolating user data into innerHTML. */
+function _esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Shared autocomplete helpers ──
+
+/**
+ * Render filtered suggestions into an autocomplete <ul>.
+ * items: [{val, label, sub?}]
+ * listId: id of the <ul> element
+ * clickFn: name of a global function to call; receives (val, label) from data-attrs
+ */
+function _acRender(listId, items, clickFn) {
+  const list = document.getElementById(listId);
+  if (!list) return;
+  if (!items.length) { list.innerHTML = ''; list.style.display = 'none'; return; }
+  list.dataset.active = '-1';
+  list.innerHTML = items.map(it =>
+    `<li class="ac-item" data-val="${_esc(it.val)}" data-label="${_esc(it.label)}"
+       onmousedown="event.preventDefault()"
+       onclick="${clickFn}(this.dataset.val, this.dataset.label)">
+       ${_esc(it.label)}${it.sub ? `<span class='ac-sub'>${_esc(it.sub)}</span>` : ''}
+    </li>`
+  ).join('');
+  list.style.display = 'block';
+}
+
+/** Keyboard navigation for any autocomplete list (arrow keys, Enter, Escape). */
+function _acKeydown(listId, e) {
+  const list = document.getElementById(listId);
+  if (!list || list.style.display === 'none') return;
+  const items = list.querySelectorAll('.ac-item');
+  if (!items.length) return;
+  let active = parseInt(list.dataset.active ?? '-1');
+  if      (e.key === 'ArrowDown')  { e.preventDefault(); active = Math.min(active + 1, items.length - 1); }
+  else if (e.key === 'ArrowUp')    { e.preventDefault(); active = Math.max(active - 1, 0); }
+  else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); items[active].click(); return; }
+  else if (e.key === 'Escape')     { list.innerHTML = ''; list.style.display = 'none'; return; }
+  else return;
+  list.dataset.active = active;
+  items.forEach((el, i) => el.classList.toggle('ac-active', i === active));
+  items[active]?.scrollIntoView({ block: 'nearest' });
+}
+
+/** Hide autocomplete dropdown after a short delay (allows click to register first). */
+function _acBlur(listId) {
+  setTimeout(() => {
+    const list = document.getElementById(listId);
+    if (list) { list.innerHTML = ''; list.style.display = 'none'; }
+  }, 150);
+}
+
+// ── Customer autocomplete (order form) ──
+function _acCustInput() {
+  const inp  = document.getElementById('of-customer-input');
+  const q    = (inp?.value || '').toLowerCase();
+  const matches = State.customers.filter(c =>
+    !q || c.name.toLowerCase().includes(q) ||
+    (c.vehicles || []).some(v => v.plate.toLowerCase().includes(q))
+  ).slice(0, 10).map(c => ({
+    val:   c.id,
+    label: c.name,
+    sub:   (c.vehicles || [])[0]?.plate || '',
+  }));
+  _acRender('of-cust-ac', matches, '_acCustPick');
+}
+
+function _acCustPick(id, name) {
+  const inp    = document.getElementById('of-customer-input');
+  const hidden = document.getElementById('of-customer');
+  if (inp)    { inp.value = name; inp.classList.remove('input-error'); }
+  if (hidden) hidden.value = id;
+  _acBlur('of-cust-ac');
+  pickOrderCustomer();
+}
+
+// ── Brand autocomplete (customer vehicle form) ──
+function _acBrandInput(i) {
+  const typeSel = document.querySelector(`.vi-type[data-idx="${i}"]`);
+  const inp     = document.querySelector(`.vi-brand-input[data-idx="${i}"]`);
+  const list    = document.getElementById(`vi-brand-ac-${i}`);
+  if (!inp || !list) return;
+  const type = typeSel?.value || '';
+  const pool = type === 'car'  ? VEHICLE_BRANDS.car
+             : type === 'moto' ? VEHICLE_BRANDS.moto
+             : [...VEHICLE_BRANDS.car, ...VEHICLE_BRANDS.moto];
+  const q = inp.value.toLowerCase();
+  const matches = pool.filter(b => !q || b.toLowerCase().includes(q)).slice(0, 10);
+  if (!matches.length) { list.innerHTML = ''; list.style.display = 'none'; return; }
+  list.dataset.active = '-1';
+  list.innerHTML = matches.map(b =>
+    `<li class="ac-item" data-val="${_esc(b)}"
+       onmousedown="event.preventDefault()"
+       onclick="_acBrandPick(${i}, this.dataset.val)">${_esc(b)}</li>`
+  ).join('');
+  list.style.display = 'block';
+}
+
+function _acBrandPick(i, brand) {
+  const inp = document.querySelector(`.vi-brand-input[data-idx="${i}"]`);
+  if (inp) inp.value = brand;
+  _acBlur(`vi-brand-ac-${i}`);
+  updateVehicleValue(i);
+}
+
 // ── Per-table sort state ──
 const _partsSort     = { col: '', dir: 'asc' };
 const _ordersSort    = { col: '', dir: 'asc' };
@@ -85,40 +191,27 @@ const VEHICLE_BRANDS = {
 
 /**
  * parseBrandModel(vehicleStr)
- * Splits "Toyota Vios 2020" → { type:'car', brand:'Toyota', otherBrand:'', model:'Vios 2020' }
- * Unknown brands return { type:'', brand:'__other__', otherBrand:'...', model:'...' }
+ * Splits "Toyota Vios 2020" → { type:'car', brandText:'Toyota', model:'Vios 2020' }
+ * Unknown brands return { type:'', brandText:'SomeBrand', model:'...' }
  */
 function parseBrandModel(vehicleStr) {
   const str = (vehicleStr || '').trim();
   for (const b of VEHICLE_BRANDS.car) {
-    if (str.toLowerCase() === b.toLowerCase()) return { type: 'car', brand: b, otherBrand: '', model: '' };
+    if (str.toLowerCase() === b.toLowerCase()) return { type: 'car', brandText: b, model: '' };
     if (str.toLowerCase().startsWith(b.toLowerCase() + ' '))
-      return { type: 'car', brand: b, otherBrand: '', model: str.slice(b.length).trim() };
+      return { type: 'car', brandText: b, model: str.slice(b.length).trim() };
   }
   for (const b of VEHICLE_BRANDS.moto) {
-    if (str.toLowerCase() === b.toLowerCase()) return { type: 'moto', brand: b, otherBrand: '', model: '' };
+    if (str.toLowerCase() === b.toLowerCase()) return { type: 'moto', brandText: b, model: '' };
     if (str.toLowerCase().startsWith(b.toLowerCase() + ' '))
-      return { type: 'moto', brand: b, otherBrand: '', model: str.slice(b.length).trim() };
+      return { type: 'moto', brandText: b, model: str.slice(b.length).trim() };
   }
-  const spaceIdx = str.indexOf(' ');
-  if (spaceIdx > 0)
-    return { type: '', brand: '__other__', otherBrand: str.slice(0, spaceIdx), model: str.slice(spaceIdx + 1).trim() };
-  return { type: '', brand: str ? '__other__' : '', otherBrand: str, model: '' };
+  // Unknown brand — split on first space
+  const sp = str.indexOf(' ');
+  if (sp > 0) return { type: '', brandText: str.slice(0, sp), model: str.slice(sp + 1).trim() };
+  return { type: '', brandText: str, model: '' };
 }
 
-/** Returns <option> HTML for the brand <select>, filtered to the chosen type. */
-function _brandSelectOptions(selectedBrand, type) {
-  const list = type === 'car' ? VEHICLE_BRANDS.car
-             : type === 'moto' ? VEHICLE_BRANDS.moto
-             : [];
-  const opts = list.map(b =>
-    `<option value="${b}" ${b === selectedBrand ? 'selected' : ''}>${b}</option>`).join('');
-  return `
-    <option value="">${t('selectBrand')}</option>
-    ${opts}
-    <option value="__other__" ${selectedBrand === '__other__' ? 'selected' : ''}>${t('otherBrand')}</option>
-  `;
-}
 
 /**
  * showInsufficientStock(shortages)
@@ -1050,11 +1143,8 @@ function openOrderForm(id) {
 
   _orderPartsUsed = JSON.parse(JSON.stringify(o.partsUsed));
 
-  const custOpts = State.customers.map(c => {
-    const firstV = (c.vehicles || [])[0] || {};
-    const hint = firstV.plate ? ` (${firstV.plate})` : '';
-    return `<option value="${c.id}" ${c.id === o.customerId ? 'selected' : ''}>${c.name}${hint}</option>`;
-  }).join('');
+  const custName = o.customerId
+    ? (State.customers.find(x => x.id === o.customerId)?.name || '') : '';
 
   openModal(isNew ? t('newServiceOrder') : t('editOrder'), `
     ${!isNew ? `
@@ -1065,9 +1155,17 @@ function openOrderForm(id) {
     <div class="form-grid">
       <label>${t('dateLabel')}<input id="of-date" type="date" value="${o.date}"/></label>
       <label>${t('customerLabel')}
-        <select id="of-customer" onchange="pickOrderCustomer(); this.classList.remove('input-error')">
-          <option value="">${t('selectCustomer')}</option>${custOpts}
-        </select>
+        <div class="autocomplete-wrap" style="position:relative">
+          <input id="of-customer-input" autocomplete="off"
+            placeholder="${t('selectCustomer')}"
+            value="${_esc(custName)}"
+            oninput="_acCustInput()"
+            onkeydown="_acKeydown('of-cust-ac', event)"
+            onfocus="_acCustInput()"
+            onblur="_acBlur('of-cust-ac')"/>
+          <input type="hidden" id="of-customer" value="${_esc(o.customerId || '')}"/>
+          <ul class="autocomplete-list" id="of-cust-ac"></ul>
+        </div>
       </label>
     </div>
     <div id="of-vehicle-selector" style="display:none;margin:8px 0 12px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
@@ -1195,14 +1293,14 @@ function saveOrder(id) {
   const g = (sel) => document.querySelector(sel)?.value?.trim() || '';
   const n = (sel) => Number(document.querySelector(sel)?.value) || 0;
 
-  const custEl    = document.getElementById('of-customer');
-  const serviceEl = document.getElementById('of-service');
+  const custInputEl = document.getElementById('of-customer-input');
+  const serviceEl   = document.getElementById('of-service');
   const cid = g('#of-customer');
   const c = State.customers.find(x => x.id === cid);
   const customerName = c ? c.name : '';
 
   let valid = true;
-  if (!customerName) { custEl?.classList.add('input-error'); valid = false; }
+  if (!customerName) { custInputEl?.classList.add('input-error'); valid = false; }
   if (!g('#of-service')) { serviceEl?.classList.add('input-error'); if (valid) serviceEl?.focus(); valid = false; }
   if (!valid) return;
 
@@ -1447,32 +1545,31 @@ function renderCustomerVehicleLines() {
   if (!container) return;
   container.innerHTML = _customerVehicles.map((v, i) => {
     const p = parseBrandModel(v.vehicle);
-    const showOther = p.brand === '__other__';
-    const brandDisabled = !p.type ? 'disabled' : '';
     return `
     <div class="vehicle-line">
       <div class="vl-row">
         <select class="vi-type" data-idx="${i}" onchange="onVehicleTypeChange(${i})">
           <option value="">${t('selectVehicleType')}</option>
-          <option value="car" ${p.type === 'car' ? 'selected' : ''}>${t('typeCar')}</option>
+          <option value="car"  ${p.type === 'car'  ? 'selected' : ''}>${t('typeCar')}</option>
           <option value="moto" ${p.type === 'moto' ? 'selected' : ''}>${t('typeMoto')}</option>
         </select>
-        <select class="vi-brand" data-idx="${i}" ${brandDisabled}
-          onchange="onVehicleBrandChange(${i}); this.classList.remove('input-error')">
-          ${_brandSelectOptions(p.brand, p.type)}
-        </select>
-        <input class="vi-brand-other" data-idx="${i}"
-          placeholder="${t('enterBrand')}"
-          value="${showOther ? p.otherBrand : ''}"
-          style="display:${showOther ? 'flex' : 'none'}"
-          oninput="updateVehicleValue(${i})"/>
+        <div class="autocomplete-wrap" style="flex:1;position:relative">
+          <input class="vi-brand-input" data-idx="${i}" autocomplete="off"
+            placeholder="${t('selectBrand')}"
+            value="${_esc(p.brandText)}"
+            oninput="_acBrandInput(${i}); updateVehicleValue(${i})"
+            onkeydown="_acKeydown('vi-brand-ac-${i}', event)"
+            onfocus="_acBrandInput(${i})"
+            onblur="_acBlur('vi-brand-ac-${i}'); updateVehicleValue(${i})"/>
+          <ul class="autocomplete-list" id="vi-brand-ac-${i}"></ul>
+        </div>
       </div>
       <div class="vl-row">
         <input class="vi-model-text" data-idx="${i}"
           placeholder="${t('modelYearLabel')}"
-          value="${p.model}"
+          value="${_esc(p.model)}"
           oninput="updateVehicleValue(${i}); this.classList.remove('input-error')"/>
-        <input class="vi-plate" placeholder="${t('licensePlateLabel')}" value="${v.plate}"
+        <input class="vi-plate" placeholder="${t('licensePlateLabel')}" value="${_esc(v.plate)}"
           oninput="updateCustomerVehicle(${i},'plate',this.value)"/>
         ${_customerVehicles.length > 1
           ? `<button class="btn-icon danger" onclick="removeCustomerVehicle(${i})">${icon('x', 14)}</button>`
@@ -1482,39 +1579,21 @@ function renderCustomerVehicleLines() {
   }).join('');
 }
 
-/** Reloads the brand dropdown when the type (Car/Motorcycle) changes. */
+/** Clear brand input and suggestions when vehicle type changes. */
 function onVehicleTypeChange(i) {
-  const typeSel  = document.querySelector(`.vi-type[data-idx="${i}"]`);
-  const brandSel = document.querySelector(`.vi-brand[data-idx="${i}"]`);
-  const otherInp = document.querySelector(`.vi-brand-other[data-idx="${i}"]`);
-  if (!typeSel || !brandSel) return;
-  const type = typeSel.value;
-  brandSel.disabled = !type;
-  brandSel.innerHTML = _brandSelectOptions('', type); // reset brand selection
-  if (otherInp) { otherInp.style.display = 'none'; otherInp.value = ''; }
+  const brandInp = document.querySelector(`.vi-brand-input[data-idx="${i}"]`);
+  if (brandInp) brandInp.value = '';
+  const acList = document.getElementById(`vi-brand-ac-${i}`);
+  if (acList) { acList.innerHTML = ''; acList.style.display = 'none'; }
   updateVehicleValue(i);
 }
 
-/** Shows/hides the "Other" brand text input and rebuilds vehicle string. */
-function onVehicleBrandChange(i) {
-  const brandSel  = document.querySelector(`.vi-brand[data-idx="${i}"]`);
-  const otherInp  = document.querySelector(`.vi-brand-other[data-idx="${i}"]`);
-  if (!brandSel || !otherInp) return;
-  const isOther = brandSel.value === '__other__';
-  otherInp.style.display = isOther ? 'flex' : 'none';
-  if (!isOther) otherInp.value = '';
-  updateVehicleValue(i);
-}
-
-/** Rebuilds the stored vehicle string from brand dropdown + model text input. */
+/** Rebuilds the stored vehicle string from brand text input + model input. */
 function updateVehicleValue(i) {
-  const brandSel  = document.querySelector(`.vi-brand[data-idx="${i}"]`);
-  const otherInp  = document.querySelector(`.vi-brand-other[data-idx="${i}"]`);
-  const modelInp  = document.querySelector(`.vi-model-text[data-idx="${i}"]`);
-  if (!brandSel || !modelInp) return;
-  const brand    = brandSel.value === '__other__'
-    ? (otherInp?.value.trim() || '') : brandSel.value;
-  const combined = [brand, modelInp.value.trim()].filter(Boolean).join(' ');
+  const brandInp = document.querySelector(`.vi-brand-input[data-idx="${i}"]`);
+  const modelInp = document.querySelector(`.vi-model-text[data-idx="${i}"]`);
+  if (!brandInp || !modelInp) return;
+  const combined = [brandInp.value.trim(), modelInp.value.trim()].filter(Boolean).join(' ');
   updateCustomerVehicle(i, 'vehicle', combined);
 }
 
@@ -1541,8 +1620,8 @@ function saveCustomer(id) {
     nameEl.focus();
     valid = false;
   }
-  // Ensure at least one vehicle with a brand selected
-  const firstBrandEl = document.querySelector('#cf-vehicles-lines .vi-brand');
+  // Ensure at least one vehicle with a brand entered
+  const firstBrandEl = document.querySelector('#cf-vehicles-lines .vi-brand-input');
   if (!_customerVehicles.length || !_customerVehicles[0].vehicle.trim()) {
     if (firstBrandEl) {
       firstBrandEl.classList.add('input-error');

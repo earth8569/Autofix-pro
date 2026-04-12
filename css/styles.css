@@ -243,6 +243,23 @@ select:focus { border-color: var(--accent); }
 .data-table .empty      { text-align: center; color: var(--text-muted); padding: 32px; }
 .row-warn               { background: var(--danger-dim) !important; }
 
+/* ── Autocomplete ── */
+.autocomplete-wrap { position: relative; display: flex; flex-direction: column; }
+.autocomplete-wrap > input { width: 100%; }
+.autocomplete-list {
+  display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 1000;
+  background: var(--bg-card); border: 1px solid var(--accent);
+  border-radius: var(--radius-sm); margin-top: 2px; padding: 4px 0;
+  max-height: 220px; overflow-y: auto; list-style: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.ac-item {
+  padding: 8px 12px; font-size: 13px; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.ac-item:hover, .ac-item.ac-active { background: var(--bg-card-hover); }
+.ac-sub { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); flex-shrink: 0; }
+
 /* ──────────────────────────────────────
    9. Badges
    ────────────────────────────────────── */
