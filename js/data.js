@@ -93,6 +93,12 @@ function migrateCustomers(customers) {
  *  State can be initialised normally.
  *  Falls back to localStorage when the
  *  Python server is not running.
+ *
+ *  If the server reports the data file is
+ *  corrupt (HTTP 500 + corrupt:true), we
+ *  stash the available backups on window
+ *  so app.js can show a recovery modal
+ *  after the app shell finishes booting.
  * ══════════════════════════════════════ */
 function _loadFromServer() {
   try {
@@ -100,6 +106,15 @@ function _loadFromServer() {
     xhr.open('GET', '/api/data', false); // false = synchronous
     xhr.send();
     if (xhr.status === 200) return JSON.parse(xhr.responseText);
+    if (xhr.status === 500) {
+      try {
+        const body = JSON.parse(xhr.responseText);
+        if (body && body.corrupt) {
+          window.__corruptOnBoot  = true;
+          window.__corruptBackups = body.backups || [];
+        }
+      } catch (_) { /* non-JSON error body — ignore */ }
+    }
   } catch (e) { /* server not running — that's OK */ }
   return null;
 }

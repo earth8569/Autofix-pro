@@ -137,8 +137,20 @@ document.addEventListener('DOMContentLoaded', () => {
       shell.style.opacity = '1';
       setTimeout(() => { shell.style.opacity = ''; shell.style.transition = ''; }, 400);
     }));
+    _maybeShowRecoveryModal();
   } else {
     // Show login screen
     showLoginScreen();
+    // Still surface data corruption even when the login screen is showing,
+    // so the user can recover without having to log in first.
+    _maybeShowRecoveryModal();
   }
 });
+
+// If data.js detected a corrupt server data file during boot, pop the
+// recovery modal so the user can pick a snapshot before using the app.
+function _maybeShowRecoveryModal() {
+  if (window.__corruptOnBoot && typeof showCorruptRecoveryModal === 'function') {
+    showCorruptRecoveryModal(window.__corruptBackups || []);
+  }
+}

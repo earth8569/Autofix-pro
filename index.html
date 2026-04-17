@@ -45,6 +45,9 @@
       <button class="hamburger" onclick="toggleSidebar()">☰</button>
       <span class="topbar-title">AutoFix Pro</span>
       <button class="btn-icon" id="topbar-theme-btn" style="margin-left:auto" onclick="toggleTheme()" title="Toggle Theme"></button>
+      <button class="btn-icon" id="topbar-backup-btn" onclick="openBackupModal()" title="Backup & Recovery" aria-label="Backup & Recovery">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-3.5-7.1M21 4v5h-5"/><path d="M12 7v5l3 2"/></svg>
+      </button>
       <button class="btn-icon" onclick="logout()" title="Logout">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
       </button>
@@ -60,6 +63,7 @@
   <script src="js/data.js?v=20260417"></script>
   <script src="js/charts.js?v=20260417"></script>
   <script src="js/export.js?v=20260417"></script>
+  <script src="js/backup.js?v=20260417"></script>
   <script src="js/pages.js?v=20260417"></script>
   <script src="js/auth.js?v=20260417"></script>
   <script src="js/app.js?v=20260417"></script>

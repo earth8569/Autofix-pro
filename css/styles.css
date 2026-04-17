@@ -900,3 +900,38 @@ html.light-theme .login-road {
 html.light-theme .sidebar.open {
   box-shadow: 4px 0 30px rgba(0, 0, 0, 0.15);
 }
+
+/* ──────────────────────────────────────
+   Backup & Recovery modal
+   ────────────────────────────────────── */
+.backup-modal .muted     { color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+.backup-modal .warn-text { color: var(--warn); }
+.backup-section          { margin-bottom: 22px; }
+.backup-section:last-child { margin-bottom: 0; }
+.backup-section h4 {
+  margin: 0 0 6px; font-size: 13px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted);
+}
+.backup-section p { margin: 0 0 10px; }
+.backup-list {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 260px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 6px; background: var(--bg);
+}
+.backup-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+.backup-row:hover { background: var(--bg-card-hover); }
+.backup-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.backup-row-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.backup-row-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.badge-save     { background: var(--primary-dim);                color: var(--primary); }
+.badge-daily    { background: rgba(16,185,129,.12);              color: var(--success); }
+.badge-shutdown { background: rgba(249,115,22,.12);              color: var(--warn); }
+.badge-legacy   { background: rgba(139,143,163,.12);             color: var(--text-muted); }
+.modal-actions {
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;
+}
