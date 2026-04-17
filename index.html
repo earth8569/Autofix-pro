@@ -8,7 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=20260417b" />
+  <script>(function(){var t=localStorage.getItem('afp-theme');if(t==='light')document.documentElement.classList.add('light-theme');})()</script>
 </head>
 <body>
 
@@ -26,6 +27,12 @@
       <nav class="sidebar-nav" id="sidebar-nav"></nav>
       <div class="sidebar-user" id="sidebar-user"></div>
       <div class="sidebar-footer">
+        <button type="button" class="theme-switch" id="theme-switch-btn" title="Toggle theme" aria-label="Toggle theme">
+          <span class="theme-switch-knob">
+            <svg class="knob-icon icon-moon" width="12" height="12" viewBox="0 0 24 24" fill="#374151" stroke="none"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+            <svg class="knob-icon icon-sun" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></svg>
+          </span>
+        </button>
         <div class="lang-toggle">
           <button class="lang-btn" id="lb-en" onclick="setLang('en')">EN</button>
           <button class="lang-btn" id="lb-th" onclick="setLang('th')">ภาษาไทย</button>
@@ -37,7 +44,8 @@
     <header class="topbar">
       <button class="hamburger" onclick="toggleSidebar()">☰</button>
       <span class="topbar-title">AutoFix Pro</span>
-      <button class="btn-icon" style="margin-left:auto" onclick="logout()" title="Logout">
+      <button class="btn-icon" id="topbar-theme-btn" style="margin-left:auto" onclick="toggleTheme()" title="Toggle Theme"></button>
+      <button class="btn-icon" onclick="logout()" title="Logout">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
       </button>
     </header>
@@ -47,13 +55,13 @@
   <div id="toast-container"></div>
 
   <!-- JS loaded in dependency order -->
-  <script src="js/i18n.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/charts.js"></script>
-  <script src="js/export.js"></script>
-  <script src="js/pages.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/i18n.js?v=20260417"></script>
+  <script src="js/utils.js?v=20260417"></script>
+  <script src="js/data.js?v=20260417"></script>
+  <script src="js/charts.js?v=20260417"></script>
+  <script src="js/export.js?v=20260417"></script>
+  <script src="js/pages.js?v=20260417"></script>
+  <script src="js/auth.js?v=20260417"></script>
+  <script src="js/app.js?v=20260417"></script>
 </body>
 </html>

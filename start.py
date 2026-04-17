@@ -7,7 +7,7 @@ WHY use this instead of double-clicking index.html?
   Browsers give every origin its own private storage bucket.
   file:// and http://localhost are different origins, so they
   have completely separate data.  Running through this server
-  means the app always uses http://localhost:8000 as its origin,
+  means the app always uses http://localhost:8080 as its origin,
   keeping your data consistent every time.
 """
 

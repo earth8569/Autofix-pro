@@ -303,7 +303,7 @@ select:focus { border-color: var(--accent); }
 .btn-primary:hover  { background: var(--accent); filter: brightness(1.1); }
 .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .btn-success        { background: var(--success); color: #fff; border-color: var(--success); font-weight: 600; }
-.btn-success:hover  { filter: brightness(1.1); }
+.btn-success:hover  { background: var(--success); color: #fff; filter: brightness(1.1); }
 .btn-lg             { padding: 12px 28px; font-size: 15px; }
 .btn-sm             { font-size: 12px; padding: 5px 12px; }
 .btn-icon {
@@ -816,4 +816,87 @@ select:focus { border-color: var(--accent); }
   0%   { transform: translateX(0px)   translateY(0); }
   12%  { transform: translateX(-10px) translateY(0); }
   100% { transform: translateX(130vw) translateY(0); }
+}
+
+/* ──────────────────────────────────────
+   22. Theme Toggle Switch (pill + sliding knob)
+   ────────────────────────────────────── */
+.theme-switch {
+  position: relative;
+  display: block;
+  width: 62px;
+  height: 28px;
+  border-radius: 14px;
+  background: #2a2e3a;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  margin: 0 0 12px 0;
+  padding: 0;
+  box-sizing: border-box;
+  transition: background 0.25s;
+  -webkit-appearance: none;
+  appearance: none;
+  font: inherit;
+  outline: none;
+}
+.theme-switch:focus-visible { box-shadow: 0 0 0 2px var(--accent-dim); }
+html.light-theme .theme-switch {
+  background: #cbd5e1;
+  border-color: #a8b3c7;
+}
+
+.theme-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s;
+  box-sizing: border-box;
+}
+/* Dark: knob left (x=0)  |  Light: knob right (62 - 22 - 2 - 2 = 36) */
+html.light-theme .theme-switch-knob {
+  transform: translateX(34px);
+  background: var(--accent);
+}
+
+.knob-icon {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  width: 12px;
+  height: 12px;
+  margin: 0 !important;
+  transform: translate(-50%, -50%) !important;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.icon-moon { opacity: 1; }
+.icon-sun  { opacity: 0; }
+html.light-theme .icon-moon { opacity: 0; }
+html.light-theme .icon-sun  { opacity: 1; }
+
+/* ──────────────────────────────────────
+   23. Light Theme
+   ────────────────────────────────────── */
+html.light-theme {
+  --bg:            #f0f2f8;
+  --bg-card:       #ffffff;
+  --bg-card-hover: #e8ebf4;
+  --bg-sidebar:    #ffffff;
+  --border:        #dde1ea;
+  --text:          #1a1d2e;
+  --text-muted:    #6b7280;
+  --accent-dim:    rgba(245, 158, 11, 0.15);
+  --primary-dim:   rgba(59, 130, 246, 0.14);
+  --danger-dim:    rgba(239, 68, 68, 0.12);
+}
+html.light-theme .login-road {
+  background: rgba(180, 185, 200, 0.7);
+}
+html.light-theme .sidebar.open {
+  box-shadow: 4px 0 30px rgba(0, 0, 0, 0.15);
 }
