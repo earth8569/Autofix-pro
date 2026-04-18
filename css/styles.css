@@ -935,3 +935,15 @@ html.light-theme .sidebar.open {
 .modal-actions {
   display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;
 }
+
+/* Date picker calendar icon — invert in dark theme so it stays visible */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.4);
+  opacity: 0.8;
+  cursor: pointer;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+html.light-theme input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+  opacity: 0.7;
+}
