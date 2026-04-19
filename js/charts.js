@@ -180,6 +180,7 @@ function renderSparkline(data, opts = {}) {
   const max = Math.max(...data, 1);
   const min = Math.min(...data, 0);
   const range = max - min || 1;
+  if (data.length < 2) return '';
   const pts = data.map((v, i) =>
     `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`
   ).join(' ');

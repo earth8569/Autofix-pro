@@ -178,7 +178,7 @@ function logStockMove(partId, type, qty, balanceBefore, balanceAfter, reason) {
 /** Calculate the total of a single order */
 function orderTotal(o) {
   const partsSum = o.partsUsed.reduce((s, p) => s + p.unitPrice * p.qty, 0);
-  return partsSum + o.laborCost - o.discount;
+  return Math.round((partsSum + o.laborCost - o.discount) * 100) / 100;
 }
 
 /** Return parts whose qty <= reorder level */

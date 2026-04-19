@@ -56,7 +56,7 @@ function exportToExcel({ parts, orders, customers, dateFrom, dateTo }) {
       'Parts Cost (฿)': partsCost,
       'Labor (฿)':      o.laborCost,
       'Discount (฿)':   o.discount,
-      'Total (฿)':      partsCost + o.laborCost - o.discount,
+      'Total (฿)':      Math.round((partsCost + o.laborCost - o.discount) * 100) / 100,
       'Notes':          o.notes,
     };
   });
@@ -84,7 +84,7 @@ function exportToExcel({ parts, orders, customers, dateFrom, dateTo }) {
     { Metric: 'Total Revenue (฿)',  Value: totalRev },
     { Metric: 'Parts Revenue (฿)',  Value: totalParts },
     { Metric: 'Labor Revenue (฿)',  Value: totalLabor },
-    { Metric: 'Avg Order Value (฿)',Value: filtered.length ? Math.round(totalRev / filtered.length) : 0 },
+    { Metric: 'Avg Order Value (฿)',Value: filtered.length ? Math.round(totalRev / filtered.length * 100) / 100 : 0 },
     { Metric: 'Inventory Items',    Value: parts.length },
     { Metric: 'Low Stock Items',    Value: parts.filter(p => p.qty <= p.reorder).length },
   ];

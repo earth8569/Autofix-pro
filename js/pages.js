@@ -632,7 +632,7 @@ function saveRestock(id) {
   if (buyCost !== p.cost) {
     if (p.qty > 0) {
       // Blend existing stock value with new purchase
-      p.cost = Math.round(((p.qty * p.cost) + (addQty * buyCost)) / (p.qty + addQty) * 100) / 100;
+      p.cost = Math.round(((p.qty * p.cost) + (addQty * buyCost)) * 100 / (p.qty + addQty)) / 100;
     } else {
       // No existing stock — new cost becomes the cost
       p.cost = buyCost;
@@ -1257,7 +1257,7 @@ function recalcOrderTotal() {
   const labor    = Number(document.getElementById('of-labor')?.value)    || 0;
   const discVal  = Number(document.getElementById('of-discount')?.value) || 0;
   const discType = document.getElementById('of-disc-type')?.value || 'flat';
-  const disc     = discType === 'pct' ? (pc + labor) * discVal / 100 : discVal;
+  const disc     = discType === 'pct' ? Math.round((pc + labor) * discVal / 100 * 100) / 100 : discVal;
   const el = document.getElementById('of-total');
   if (el) {
     const discNote = discType === 'pct' && discVal > 0
@@ -1328,7 +1328,7 @@ function saveOrder(id) {
   const discVal    = n('#of-discount');
   const discType   = g('#of-disc-type');
   const partsTotal = _orderPartsUsed.reduce((s, p) => s + p.unitPrice * p.qty, 0);
-  const discount   = discType === 'pct' ? (partsTotal + laborCost) * discVal / 100 : discVal;
+  const discount   = discType === 'pct' ? Math.round((partsTotal + laborCost) * discVal / 100 * 100) / 100 : discVal;
 
   const data = {
     date: g('#of-date'), customerId: cid, customerName,
